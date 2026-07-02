@@ -86,6 +86,18 @@ async function sendToTelegram(tournamentName, adminCode) {
 }
 
 /**
+ * Helper to shuffle array (Fisher-Yates)
+ */
+function shuffleArray(array) {
+  const arr = [...array];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+/**
  * Create a new tournament with a list of teams, generating the play-off bracket automatically.
  * @param {string} name - Tournament name
  * @param {Array<string>} teamNames - List of team names
@@ -108,8 +120,11 @@ export async function createNewTournament(name, teamNames) {
   if (tError) throw tError;
 
   try {
+    // Shuffle the team names array to randomize match pairing
+    const shuffledNames = shuffleArray(teamNames);
+
     // 2. Insert Teams in bulk
-    const teamsToInsert = teamNames.map(teamName => ({
+    const teamsToInsert = shuffledNames.map(teamName => ({
       tournament_id: tournament.id,
       name: teamName
     }));
