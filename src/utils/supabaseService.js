@@ -262,6 +262,45 @@ async function propagateWinner(match, winnerId, oldWinnerId) {
     if (oldWinnerInNext) {
       await propagateWinner(clearedNextMatch, null, oldWinnerInNext);
     }
+    return;
+  }
+
+  // Auto-bye detection: if the next match now has exactly 1 team
+  // and no other match feeds into the empty slot, auto-complete as bye.
+  if (winnerId && updatedNextMatch) {
+    const hasT1 = updatedNextMatch.team1_id != null;
+    const hasT2 = updatedNextMatch.team2_id != null;
+
+    if ((hasT1 && !hasT2) || (!hasT1 && hasT2)) {
+      // Check how many matches feed into this next match
+      const { data: feeders } = await supabase
+        .from('matches')
+        .select('id')
+        .eq('next_match_id', updatedNextMatch.id);
+
+      const feederCount = feeders ? feeders.length : 0;
+
+      // If only 1 feeder → structural bye, auto-complete
+      if (feederCount <= 1) {
+        const byeWinner = updatedNextMatch.team1_id || updatedNextMatch.team2_id;
+        const { data: autoCompleted } = await supabase
+          .from('matches')
+          .update({
+            winner_id: byeWinner,
+            is_completed: true,
+            match_status: 'completed'
+          })
+          .eq('id', updatedNextMatch.id)
+          .select()
+          .single();
+
+        if (autoCompleted) {
+          // Cascade: propagate the bye winner to the next round
+          await propagateWinner(autoCompleted, byeWinner, null);
+        }
+      }
+    }
   }
 }
+
 

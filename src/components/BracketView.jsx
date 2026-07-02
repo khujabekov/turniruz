@@ -120,7 +120,7 @@ export default function BracketView({ matches, teams, isAdmin, onMatchClick }) {
   const getMatchStatus = (match) => {
     const t1 = match.team1_id;
     const t2 = match.team2_id;
-    const isBye = t1 && !t2 && match.round_number === 1;
+    const isBye = (t1 && !t2 && match.winner_id === t1) || (!t1 && t2 && match.winner_id === t2);
     if (isBye) return 'bye';
     return match.match_status || 'waiting';
   };
@@ -246,7 +246,7 @@ export default function BracketView({ matches, teams, isAdmin, onMatchClick }) {
 
   // Stats for spectator view
   const totalMatches = matches.filter(m => getMatchStatus(m) !== 'bye').length;
-  const completedMatches = matches.filter(m => getMatchStatus(m) === 'completed' && !(m.team1_id && !m.team2_id && m.round_number === 1)).length;
+  const completedMatches = matches.filter(m => getMatchStatus(m) === 'completed').length;
   const progressPercent = totalMatches > 0 ? Math.round((completedMatches / totalMatches) * 100) : 0;
 
   return (

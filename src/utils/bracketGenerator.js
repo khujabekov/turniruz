@@ -1,37 +1,32 @@
 /**
- * Bracket Generator — Klassik Power-of-2 Single-Elimination Tizimi.
- * Sodda, ishonchli, UI bilan to'liq mos.
+ * Bracket Generator — Natural Bracket Single-Elimination Tizimi.
+ * 
+ * Har raundda ceil(N/2) match yaratiladi. Toq jamoalar bo'lganda
+ * har raundda ko'pi bilan 1 ta bye bo'ladi (power-of-2 yaxlitlash yo'q).
+ * 
+ * Misollar:
+ *   6 ta jamoa:  R1=3, R2=2(1 bye), Final=1  → 3 raund
+ *   7 ta jamoa:  R1=4(1 bye), R2=2, Final=1   → 3 raund
+ *   9 ta jamoa:  R1=5(1 bye), R2=3(1 bye), R3=2(1 bye), Final=1 → 4 raund
+ *   13 ta jamoa: R1=7(1 bye), R2=4(1 bye), R3=2, Final=1 → 4 raund
+ *   16 ta jamoa: R1=8, R2=4, R3=2, Final=1    → 4 raund (bye yo'q)
  */
 
 /**
- * Eng yaqin 2-ning darajasini, bye sonini va raundlar sonini hisoblaydi.
+ * Raundlar soni va har bir raunddagi matchlar sonini hisoblaydi.
+ * @param {number} N - Jamoalar soni
+ * @returns {{ roundMatchCounts: number[], roundsCount: number }}
  */
 export function calculateBracketSize(N) {
-  if (N < 2) return { M: 2, byes: Math.max(0, 2 - N), roundsCount: 1 };
-  let M = 2;
-  let roundsCount = 1;
-  while (M < N) {
-    M *= 2;
-    roundsCount++;
+  if (N < 2) return { roundMatchCounts: [1], roundsCount: 1 };
+  const roundMatchCounts = [];
+  let remaining = N;
+  while (remaining > 1) {
+    const matchCount = Math.ceil(remaining / 2);
+    roundMatchCounts.push(matchCount);
+    remaining = matchCount; // g'oliblar soni = matchlar soni
   }
-  return { M, byes: M - N, roundsCount };
-}
-
-/**
- * B ta bye-ni L ta slot ichida teng taqsimlaydi.
- */
-export function getDistributedIndices(L, B) {
-  const indices = new Set();
-  if (B <= 0) return indices;
-  if (B >= L) {
-    for (let i = 0; i < L; i++) indices.add(i);
-    return indices;
-  }
-  const step = L / B;
-  for (let i = 0; i < B; i++) {
-    indices.add(Math.floor(i * step));
-  }
-  return indices;
+  return { roundMatchCounts, roundsCount: roundMatchCounts.length };
 }
 
 /**
@@ -44,18 +39,17 @@ export function generateMatchesForTournament(tournamentId, teams) {
   const N = teams.length;
   if (N < 2) throw new Error("Turnir yaratish uchun kamida 2 ta jamoa kerak.");
 
-  const { M, byes, roundsCount } = calculateBracketSize(N);
+  const { roundMatchCounts, roundsCount } = calculateBracketSize(N);
   const matchesByRound = [];
 
-  // 1. Har bir raund uchun bo'sh o'yinlar yaratish
-  for (let r = 1; r <= roundsCount; r++) {
-    const matchesInRound = M / Math.pow(2, r);
+  // 1. Har bir raund uchun match-larni yaratish
+  for (let r = 0; r < roundsCount; r++) {
     const roundMatches = [];
-    for (let m = 0; m < matchesInRound; m++) {
+    for (let m = 0; m < roundMatchCounts[r]; m++) {
       roundMatches.push({
         id: crypto.randomUUID(),
         tournament_id: tournamentId,
-        round_number: r,
+        round_number: r + 1,
         match_order: m + 1,
         team1_id: null,
         team2_id: null,
@@ -72,43 +66,67 @@ export function generateMatchesForTournament(tournamentId, teams) {
 
   // 2. Raundlar orasini bog'lash (next_match_id)
   for (let r = 0; r < roundsCount - 1; r++) {
-    const currentRound = matchesByRound[r];
-    const nextRound = matchesByRound[r + 1];
-    for (let m = 0; m < currentRound.length; m++) {
-      currentRound[m].next_match_id = nextRound[Math.floor(m / 2)].id;
+    const curr = matchesByRound[r];
+    const next = matchesByRound[r + 1];
+    for (let m = 0; m < curr.length; m++) {
+      curr[m].next_match_id = next[Math.floor(m / 2)].id;
     }
   }
 
-  // 3. 1-raundga jamoalarni va bye-larni joylashtirish
+  // 3. 1-raundga jamoalarni joylashtirish
   const round1 = matchesByRound[0];
-  const L = M / 2;
-  const byeMatchIndices = getDistributedIndices(L, byes);
-
   let teamIdx = 0;
-  for (let m = 0; m < L; m++) {
-    const match = round1[m];
-    if (byeMatchIndices.has(m)) {
-      // Bye: faqat 1 ta jamoa, 2-chi yo'q
-      const team = teams[teamIdx++];
-      match.team1_id = team.id;
-      match.team2_id = null;
-      match.winner_id = team.id;
-      // Bye g'olibini 2-raundga avtomatik o'tkazish
-      if (matchesByRound.length > 1) {
-        const nextMatch = matchesByRound[1][Math.floor(m / 2)];
+  for (let m = 0; m < round1.length; m++) {
+    round1[m].team1_id = teams[teamIdx++].id;
+    if (teamIdx < N) {
+      round1[m].team2_id = teams[teamIdx++].id;
+    } else {
+      // Bye: faqat 1 ta jamoa, 2-chi yo'q → avtomatik g'olib
+      round1[m].team2_id = null;
+      round1[m].winner_id = round1[m].team1_id;
+      round1[m].is_completed = true;
+      round1[m].match_status = 'completed';
+    }
+  }
+
+  // 4. Bye-larni kaskad ravishda keyingi raundlarga o'tkazish
+  //    Agar raund R da bye g'olibi bo'lsa, uni raund R+1 dagi matchga qo'yamiz.
+  //    Agar R+1 dagi matchga faqat 1 ta feeder kelsa (oxirgi match, juft yo'q),
+  //    u ham bye bo'ladi → yana keyingi raundga o'tkazamiz.
+  for (let r = 0; r < roundsCount - 1; r++) {
+    const curr = matchesByRound[r];
+    const next = matchesByRound[r + 1];
+
+    // G'oliblarni keyingi raundga o'tkazish
+    for (let m = 0; m < curr.length; m++) {
+      if (curr[m].winner_id) {
+        const nextMatch = next[Math.floor(m / 2)];
         if (m % 2 === 0) {
-          nextMatch.team1_id = team.id;
+          nextMatch.team1_id = curr[m].winner_id;
         } else {
-          nextMatch.team2_id = team.id;
+          nextMatch.team2_id = curr[m].winner_id;
         }
       }
-    } else {
-      match.team1_id = teams[teamIdx++].id;
-      match.team2_id = teams[teamIdx++].id;
+    }
+
+    // Keyingi raunddagi matchlarni tekshirish: structural bye bor-yo'qligi
+    for (let j = 0; j < next.length; j++) {
+      const nm = next[j];
+      const feeder2Idx = 2 * j + 1; // team2 ni yuboradigan match indeksi
+      const hasFeeder2 = feeder2Idx < curr.length;
+
+      // Agar faqat 1 ta feeder bo'lsa -> structural bye
+      if (!hasFeeder2) {
+        nm.match_status = 'bye';
+        if (nm.team1_id) {
+          nm.winner_id = nm.team1_id;
+          nm.is_completed = true;
+          nm.match_status = 'completed';
+        }
+      }
     }
   }
 
-  // 4. Barcha o'yinlarni bitta massivga yig'ish
+  // 5. Barcha o'yinlarni bitta massivga yig'ish
   return matchesByRound.flat();
 }
-
