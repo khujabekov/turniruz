@@ -27,11 +27,24 @@ export default function App() {
     }
   });
 
+  const [showAdminTab, setShowAdminTab] = useState(() => {
+    return localStorage.getItem('admin_unlocked') === 'true' || window.location.hash === '#admin';
+  });
+
   const isEnvOk = import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY;
 
   /* hash-based routing */
   useEffect(() => {
-    const onHash = () => setIsAdmin(window.location.hash === '#admin');
+    const onHash = () => {
+      const isHashAdmin = window.location.hash === '#admin';
+      setIsAdmin(isHashAdmin);
+      if (isHashAdmin) {
+        localStorage.setItem('admin_unlocked', 'true');
+        setShowAdminTab(true);
+      }
+    };
+    // Trigger check on load
+    onHash();
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
@@ -168,20 +181,38 @@ export default function App() {
         </div>
 
         {/* Desktop navbar links */}
-        <nav className="desktop-nav">
+        <nav className="desktop-nav" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button
             className={`nav-tab${!isAdmin ? ' active' : ''}`}
             onClick={() => { window.location.hash = ''; setIsAdmin(false); }}
           >👁 Kuzatish</button>
-          <button
-            className={`nav-tab${isAdmin ? ' active' : ''}`}
-            onClick={() => { window.location.hash = '#admin'; setIsAdmin(true); }}
-          >⚙ Admin</button>
+          {showAdminTab && (
+            <button
+              className={`nav-tab${isAdmin ? ' active' : ''}`}
+              onClick={() => { window.location.hash = '#admin'; setIsAdmin(true); }}
+            >⚙ Admin</button>
+          )}
+          {showAdminTab && (
+            <button
+              className="nav-tab"
+              onClick={() => {
+                if (window.confirm("Admin rejimidan chiqmoqchimisiz? Panel oddiy foydalanuvchilarga ko'rinmaydigan qilib yashiriladi.")) {
+                  localStorage.removeItem('admin_unlocked');
+                  setShowAdminTab(false);
+                  setIsAdmin(false);
+                  window.location.hash = '';
+                }
+              }}
+              style={{ color: 'var(--c-rose)' }}
+            >
+              🔒 Chiqish
+            </button>
+          )}
         </nav>
       </header>
 
       {/* Main Container */}
-      <main className="app-main">
+      <main className="app-main" style={!showAdminTab ? { paddingBottom: '16px' } : undefined}>
 
         {isAdmin ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -279,22 +310,24 @@ export default function App() {
       </main>
 
       {/* Sticky Bottom Navigation Bar for Mobile */}
-      <nav className="bottom-bar">
-        <button
-          className={`bottom-bar-tab${!isAdmin ? ' active' : ''}`}
-          onClick={() => { window.location.hash = ''; setIsAdmin(false); }}
-        >
-          <span className="tab-icon">👁</span>
-          <span>Kuzatish</span>
-        </button>
-        <button
-          className={`bottom-bar-tab${isAdmin ? ' active' : ''}`}
-          onClick={() => { window.location.hash = '#admin'; setIsAdmin(true); }}
-        >
-          <span className="tab-icon">⚙</span>
-          <span>Admin</span>
-        </button>
-      </nav>
+      {showAdminTab && (
+        <nav className="bottom-bar">
+          <button
+            className={`bottom-bar-tab${!isAdmin ? ' active' : ''}`}
+            onClick={() => { window.location.hash = ''; setIsAdmin(false); }}
+          >
+            <span className="tab-icon">👁</span>
+            <span>Kuzatish</span>
+          </button>
+          <button
+            className={`bottom-bar-tab${isAdmin ? ' active' : ''}`}
+            onClick={() => { window.location.hash = '#admin'; setIsAdmin(true); }}
+          >
+            <span className="tab-icon">⚙</span>
+            <span>Admin</span>
+          </button>
+        </nav>
+      )}
 
       {/* Footer (desktop only) */}
       <footer className="app-footer">
