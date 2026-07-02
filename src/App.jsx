@@ -179,7 +179,7 @@ export default function App() {
       )}
 
       {/* Header */}
-      <header className="app-header">
+      <header className="app-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div className="app-logo">
           <div className="app-logo-icon">🏆</div>
           <div>
@@ -190,15 +190,14 @@ export default function App() {
 
         {/* Desktop navbar links - ONLY visible if user is currently in admin mode */}
         {isAdmin && (
-          <nav className="desktop-nav" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <nav className="desktop-nav" style={{ display: 'flex', alignItems: 'center' }}>
             <button
-              className="nav-tab"
+              className="btn btn-ghost btn-sm"
               onClick={() => { window.location.hash = ''; setIsAdmin(false); }}
-            >👁 Chiqish (Kuzatish)</button>
-            <button
-              className="nav-tab active"
-              onClick={() => { window.location.hash = '#admin'; setIsAdmin(true); }}
-            >⚙ Admin</button>
+              style={{ color: 'var(--c-rose)', fontWeight: 700, padding: '6px 12px', border: '1px solid rgba(244,63,94,0.2)' }}
+            >
+              🔒 Chiqish
+            </button>
           </nav>
         )}
       </header>

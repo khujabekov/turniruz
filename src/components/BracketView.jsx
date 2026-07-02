@@ -90,7 +90,7 @@ export default function BracketView({ matches, teams, isAdmin, onMatchClick }) {
   }
 
   const finalMatch = rounds[rounds.length - 1]?.matches[0];
-  const champion = finalMatch?.winner_id ? teamsMap.get(finalMatch.winner_id) : null;
+  const champion = finalMatch?.is_completed && finalMatch?.winner_id ? teamsMap.get(finalMatch.winner_id) : null;
 
   // Mobile scroll helpers
   const scrollToRound = (index) => {

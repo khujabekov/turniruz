@@ -1608,6 +1608,40 @@ input, textarea, select {
   font-family: monospace;
 }
 
+/* Admin Tabs Styling */
+.admin-tab-btn {
+  background: transparent;
+  color: var(--c-muted);
+  border: none;
+}
+
+.admin-tab-btn.active {
+  background: var(--c-card) !important;
+  color: #fff !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.admin-tab-btn:hover:not(.active) {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* Header UI Wrap protection */
+@media (max-width: 480px) {
+  .app-header {
+    padding: 10px 14px !important;
+    gap: 8px;
+  }
+  .app-logo-title {
+    font-size: 16px !important;
+  }
+  .app-logo-subtitle {
+    font-size: 10px !important;
+  }
+}
+
+
 
 
 

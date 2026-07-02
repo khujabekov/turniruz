@@ -67,6 +67,16 @@ export default function AdminPanel({ onSelectTournament, activeTournamentId }) {
     alert("Admin paneli havolasi clipboardga nusxalandi! Rejimga o'tish uchun brauzerda oching.");
   };
 
+
+
+
+  const [teamCount, setTeamCount] = useState(0);
+  const [activeTab, setActiveTab] = useState('list'); // 'list' or 'create'
+
+  useEffect(() => {
+    setTeamCount(teamsText.split('\n').filter(t => t.trim()).length);
+  }, [teamsText]);
+
   const handleCreate = async (e) => {
     e.preventDefault();
     setError(''); setSuccess('');
@@ -80,6 +90,7 @@ export default function AdminPanel({ onSelectTournament, activeTournamentId }) {
       setName(''); setTeamsText('');
       onSelectTournament(t.id);
       load();
+      setActiveTab('list'); // Go back to list tab on success
     } catch (err) {
       setError(err.message || 'Xatolik yuz berdi.');
     } finally { setLoading(false); }
@@ -135,153 +146,183 @@ export default function AdminPanel({ onSelectTournament, activeTournamentId }) {
     if (!name) setName(`${count} talik Turnir`);
   };
 
-  const teamCount = teamsText.split('\n').filter(t => t.trim()).length;
-
   return (
-    <div className="admin-grid">
-
-      {/* CREATE FORM */}
-      <div className="glass admin-card">
-        <div>
-          <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#fff', display: 'flex', alignItems: 'center', gap: 8 }}>
-            ✨ Yangi Turnir Yaratish
-          </h3>
-          <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--c-muted)' }}>
-            Jamoalar nomlarini qatorma-qator kiriting.
-          </p>
-        </div>
-
-        {error && <div className="alert-error">{error}</div>}
-        {success && <div className="alert-success">{success}</div>}
-
-        <form onSubmit={handleCreate} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div>
-            <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--c-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>
-              Turnir Nomi
-            </label>
-            <input
-              className="inp"
-              value={name}
-              onChange={e => setName(e.target.value)}
-              placeholder="Masalan: Navro'z Kubogi 2026"
-              disabled={loading}
-            />
-          </div>
-
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-              <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--c-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                Jamoalar (qatorma-qator)
-              </label>
-              <span style={{ fontSize: 10, fontWeight: 700, background: '#1e293b', border: '1px solid var(--c-border)', borderRadius: 6, padding: '2px 8px', color: 'var(--c-muted)' }}>
-                {teamCount} ta jamoa
-              </span>
-            </div>
-            <textarea
-              className="inp"
-              rows={5}
-              value={teamsText}
-              onChange={e => setTeamsText(e.target.value)}
-              placeholder={'Jamoa A\nJamoa B\nJamoa C'}
-              disabled={loading}
-              style={{ fontFamily: 'monospace', resize: 'vertical' }}
-            />
-          </div>
-
-          <div>
-            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--c-muted)', textTransform: 'uppercase', marginBottom: 8 }}>
-              Tezkor sinov:
-            </div>
-            <div className="quick-fill-grid">
-              {[8, 10, 12, 14, 16, 22].map(c => (
-                <button key={c} type="button" className="btn btn-ghost btn-sm" onClick={() => fillMock(c)} disabled={loading}>
-                  {c} ta
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <button type="submit" className="btn btn-primary" disabled={loading} style={{ width: '100%', marginTop: 4 }}>
-            {loading
-              ? <span className="spinner" style={{ width: 18, height: 18, borderWidth: 2 }} />
-              : <>▶ Setkani Generatsiya Qilish</>
-            }
-          </button>
-        </form>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      
+      {/* Tab Selector */}
+      <div className="admin-tabs" style={{ display: 'flex', gap: 8, background: 'rgba(30, 41, 59, 0.4)', padding: 4, borderRadius: 10, border: '1px solid var(--c-border)' }}>
+        <button
+          type="button"
+          onClick={() => setActiveTab('list')}
+          className={`admin-tab-btn${activeTab === 'list' ? ' active' : ''}`}
+          style={{ flex: 1, padding: '10px', fontSize: 13, fontWeight: 700, borderRadius: 8, cursor: 'pointer', transition: 'all 0.2s ease', border: 'none' }}
+        >
+          🏆 Mavjud Turnirlar
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('create')}
+          className={`admin-tab-btn${activeTab === 'create' ? ' active' : ''}`}
+          style={{ flex: 1, padding: '10px', fontSize: 13, fontWeight: 700, borderRadius: 8, cursor: 'pointer', transition: 'all 0.2s ease', border: 'none' }}
+        >
+          ✨ Yangi Yaratish
+        </button>
       </div>
 
-      {/* TOURNAMENTS LIST */}
-      <div className="glass admin-card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#fff' }}>🏆 Mavjud Turnirlar</h3>
-          <button className="btn btn-ghost btn-sm" onClick={load}>Yangilash</button>
-        </div>
-
-        {tournaments.length === 0 ? (
-          <div style={{
-            flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-            textAlign: 'center', padding: 32, border: '1px dashed var(--c-border)', borderRadius: 12, color: 'var(--c-muted)'
-          }}>
-            <div style={{ fontSize: 32, marginBottom: 8 }}>📋</div>
-            <p style={{ margin: 0, fontSize: 13 }}>Hech qanday turnir topilmadi.</p>
+      {/* CREATE FORM TAB */}
+      {activeTab === 'create' && (
+        <div className="glass admin-card fade-in" style={{ padding: 20, borderRadius: 16 }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#fff', display: 'flex', alignItems: 'center', gap: 8 }}>
+              ✨ Yangi Turnir Yaratish
+            </h3>
+            <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--c-muted)' }}>
+              Jamoalar nomlarini qatorma-qator kiriting.
+            </p>
           </div>
-        ) : (
-          <div style={{ overflowY: 'auto', maxHeight: 460, display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {tournaments.map(t => {
-              const isActive = activeTournamentId === t.id;
-              const statusClass = t.status === 'completed' ? 'status-complete' : t.status === 'active' ? 'status-active' : 'status-draft';
-              const teamCountVal = tDetails[t.id] || 0;
-              return (
-                <div
-                  key={t.id}
-                  onClick={() => onSelectTournament(t.id)}
-                  className={`tour-list-card${isActive ? ' active' : ''}`}
-                >
-                  <div className="tour-list-icon" style={{
-                    background: t.status === 'completed' ? 'rgba(245,158,11,0.1)' : 'rgba(16,185,129,0.1)',
-                    border: `1px solid ${t.status === 'completed' ? 'rgba(245,158,11,0.3)' : 'rgba(16,185,129,0.3)'}`,
-                  }}>
-                    {t.status === 'completed' ? '🥇' : '⚽'}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <div style={{ fontWeight: 700, fontSize: 14, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.name}</div>
+
+          {error && <div className="alert-error" style={{ marginTop: 12 }}>{error}</div>}
+          {success && <div className="alert-success" style={{ marginTop: 12 }}>{success}</div>}
+
+          <form onSubmit={handleCreate} style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 16 }}>
+            <div>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--c-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>
+                Turnir Nomi
+              </label>
+              <input
+                className="inp"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                placeholder="Masalan: Navro'z Kubogi 2026"
+                disabled={loading}
+              />
+            </div>
+
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--c-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  Jamoalar (qatorma-qator)
+                </label>
+                <span style={{ fontSize: 10, fontWeight: 700, background: '#1e293b', border: '1px solid var(--c-border)', borderRadius: 6, padding: '2px 8px', color: 'var(--c-muted)' }}>
+                  {teamCount} ta jamoa
+                </span>
+              </div>
+              <textarea
+                className="inp"
+                rows={6}
+                value={teamsText}
+                onChange={e => setTeamsText(e.target.value)}
+                placeholder={'Jamoa A\nJamoa B\nJamoa C'}
+                disabled={loading}
+                style={{ fontFamily: 'monospace', resize: 'vertical' }}
+              />
+            </div>
+
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--c-muted)', textTransform: 'uppercase', marginBottom: 8 }}>
+                Tezkor sinov:
+              </div>
+              <div className="quick-fill-grid">
+                {[8, 10, 12, 14, 16, 22].map(c => (
+                  <button key={c} type="button" className="btn btn-ghost btn-sm" onClick={() => fillMock(c)} disabled={loading}>
+                    {c} ta
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <button type="submit" className="btn btn-primary" disabled={loading} style={{ width: '100%', marginTop: 4 }}>
+              {loading
+                ? <span className="spinner" style={{ width: 18, height: 18, borderWidth: 2 }} />
+                : <>▶ Setkani Generatsiya Qilish</>
+              }
+            </button>
+          </form>
+        </div>
+      )}
+
+      {/* TOURNAMENTS LIST TAB */}
+      {activeTab === 'list' && (
+        <div className="glass admin-card fade-in" style={{ padding: 20, borderRadius: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#fff' }}>🏆 Mavjud Turnirlar</h3>
+            <button className="btn btn-ghost btn-sm" onClick={load}>Yangilash</button>
+          </div>
+
+          {tournaments.length === 0 ? (
+            <div style={{
+              flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+              textAlign: 'center', padding: 32, border: '1px dashed var(--c-border)', borderRadius: 12, color: 'var(--c-muted)'
+            }}>
+              <div style={{ fontSize: 32, marginBottom: 8 }}>📋</div>
+              <p style={{ margin: 0, fontSize: 13 }}>Hech qanday turnir topilmadi.</p>
+              <button 
+                type="button" 
+                className="btn btn-ghost btn-sm" 
+                onClick={() => setActiveTab('create')}
+                style={{ marginTop: 12 }}
+              >
+                + Yangi yaratish
+              </button>
+            </div>
+          ) : (
+            <div style={{ overflowY: 'auto', maxHeight: 460, display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {tournaments.map(t => {
+                const isActive = activeTournamentId === t.id;
+                const statusClass = t.status === 'completed' ? 'status-complete' : t.status === 'active' ? 'status-active' : 'status-draft';
+                const teamCountVal = tDetails[t.id] || 0;
+                return (
+                  <div
+                    key={t.id}
+                    onClick={() => onSelectTournament(t.id)}
+                    className={`tour-list-card${isActive ? ' active' : ''}`}
+                  >
+                    <div className="tour-list-icon" style={{
+                      background: t.status === 'completed' ? 'rgba(245,158,11,0.1)' : 'rgba(16,185,129,0.1)',
+                      border: `1px solid ${t.status === 'completed' ? 'rgba(245,158,11,0.3)' : 'rgba(16,185,129,0.3)'}`,
+                    }}>
+                      {t.status === 'completed' ? '🥇' : '⚽'}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <div style={{ fontWeight: 700, fontSize: 14, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.name}</div>
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          onClick={e => handleRename(t.id, t.name, e)}
+                          title="Nomini o'zgartirish"
+                          style={{ padding: '2px 4px', fontSize: 10, minWidth: 'auto', minHeight: 'auto' }}
+                        >✏️</button>
+                      </div>
+                      <div style={{ fontSize: 10, color: 'var(--c-muted)', marginTop: 2, display: 'flex', gap: 8 }}>
+                        <span>{new Date(t.created_at).toLocaleDateString()}</span>
+                        <span>•</span>
+                        <span style={{ color: 'var(--c-green)' }}>{teamCountVal} ta jamoa</span>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
                       <button
                         className="btn btn-ghost btn-sm"
-                        onClick={e => handleRename(t.id, t.name, e)}
-                        title="Nomini o'zgartirish"
-                        style={{ padding: '2px 4px', fontSize: 10, minWidth: 'auto', minHeight: 'auto' }}
-                      >✏️</button>
-                    </div>
-                    <div style={{ fontSize: 10, color: 'var(--c-muted)', marginTop: 2, display: 'flex', gap: 8 }}>
-                      <span>{new Date(t.created_at).toLocaleDateString()}</span>
-                      <span>•</span>
-                      <span style={{ color: 'var(--c-green)' }}>{teamCountVal} ta jamoa</span>
+                        onClick={e => handleCopyLink(t.id, e)}
+                        title="Havolani nusxalash"
+                        style={{ padding: '4px 8px', minWidth: '36px', minHeight: '36px' }}
+                      >🔗</button>
+                      <span className={`status-badge ${statusClass}`} style={{ fontSize: 9 }}>
+                        {t.status === 'completed' ? 'Yakunlandi' : 'Faol'}
+                      </span>
+                      <button
+                        className="btn btn-danger btn-sm"
+                        onClick={e => handleDelete(t.id, e)}
+                        title="O'chirish"
+                        style={{ padding: '4px 8px', minWidth: '36px', minHeight: '36px' }}
+                      >🗑</button>
                     </div>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                    <button
-                      className="btn btn-ghost btn-sm"
-                      onClick={e => handleCopyLink(t.id, e)}
-                      title="Havolani nusxalash"
-                      style={{ padding: '4px 8px', minWidth: '36px', minHeight: '36px' }}
-                    >🔗</button>
-                    <span className={`status-badge ${statusClass}`} style={{ fontSize: 9 }}>
-                      {t.status === 'completed' ? 'Yakunlandi' : 'Faol'}
-                    </span>
-                    <button
-                      className="btn btn-danger btn-sm"
-                      onClick={e => handleDelete(t.id, e)}
-                      title="O'chirish"
-                      style={{ padding: '4px 8px', minWidth: '36px', minHeight: '36px' }}
-                    >🗑</button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
