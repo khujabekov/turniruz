@@ -1541,5 +1541,64 @@ input, textarea, select {
   opacity: 0.6;
 }
 
+/* Up/Down Counter Styles */
+.counter-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  border: 1px solid var(--c-border);
+  background: rgba(30, 41, 59, 0.6);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.counter-btn:hover:not(:disabled) {
+  background: var(--c-blue);
+  border-color: var(--c-blue);
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.3);
+}
+
+.counter-btn:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.counter-btn:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+}
+
+.counter-btn-sm {
+  width: 36px;
+  height: 36px;
+  font-size: 14px;
+  border-radius: 6px;
+}
+
+.score-counter-val {
+  font-size: 24px;
+  font-weight: 900;
+  color: #fff;
+  min-width: 40px;
+  text-align: center;
+  font-family: monospace;
+}
+
+.penalty-counter-val {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--c-gold);
+  min-width: 30px;
+  text-align: center;
+  font-family: monospace;
+}
+
+
 
 
