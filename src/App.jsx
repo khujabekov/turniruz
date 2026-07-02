@@ -27,10 +27,6 @@ export default function App() {
     }
   });
 
-  const [showAdminTab, setShowAdminTab] = useState(() => {
-    return localStorage.getItem('admin_unlocked') === 'true' || window.location.hash === '#admin';
-  });
-
   const isEnvOk = import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY;
 
   /* hash-based routing */
@@ -38,12 +34,7 @@ export default function App() {
     const onHash = () => {
       const isHashAdmin = window.location.hash === '#admin';
       setIsAdmin(isHashAdmin);
-      if (isHashAdmin) {
-        localStorage.setItem('admin_unlocked', 'true');
-        setShowAdminTab(true);
-      }
     };
-    // Trigger check on load
     onHash();
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
@@ -112,7 +103,6 @@ export default function App() {
           .single();
 
         if (!tour || !tour.admin_code) {
-          // If no code exists, unlock editing automatically (backward compatibility)
           setIsAdminAuthorized(true);
         } else {
           const cachedCode = passcodes[activeId];
@@ -155,7 +145,16 @@ export default function App() {
 
   const handleSave = async (payload) => {
     try {
-      await updateMatchResult(payload.matchId, payload.score1, payload.score2, payload.penalty1, payload.penalty2, payload.winnerId, payload.oldWinnerId);
+      await updateMatchResult(
+        payload.matchId,
+        payload.score1,
+        payload.score2,
+        payload.penalty1,
+        payload.penalty2,
+        payload.winnerId,
+        payload.oldWinnerId,
+        payload.isCompleted
+      );
       setSelMatch(null);
     } catch (err) { alert('Xatolik: ' + err.message); }
   };
@@ -180,39 +179,24 @@ export default function App() {
           </div>
         </div>
 
-        {/* Desktop navbar links */}
-        <nav className="desktop-nav" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button
-            className={`nav-tab${!isAdmin ? ' active' : ''}`}
-            onClick={() => { window.location.hash = ''; setIsAdmin(false); }}
-          >👁 Kuzatish</button>
-          {showAdminTab && (
-            <button
-              className={`nav-tab${isAdmin ? ' active' : ''}`}
-              onClick={() => { window.location.hash = '#admin'; setIsAdmin(true); }}
-            >⚙ Admin</button>
-          )}
-          {showAdminTab && (
+        {/* Desktop navbar links - ONLY visible if user is currently in admin mode */}
+        {isAdmin && (
+          <nav className="desktop-nav" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <button
               className="nav-tab"
-              onClick={() => {
-                if (window.confirm("Admin rejimidan chiqmoqchimisiz? Panel oddiy foydalanuvchilarga ko'rinmaydigan qilib yashiriladi.")) {
-                  localStorage.removeItem('admin_unlocked');
-                  setShowAdminTab(false);
-                  setIsAdmin(false);
-                  window.location.hash = '';
-                }
-              }}
-              style={{ color: 'var(--c-rose)' }}
-            >
-              🔒 Chiqish
-            </button>
-          )}
-        </nav>
+              onClick={() => { window.location.hash = ''; setIsAdmin(false); }}
+            >👁 Chiqish (Kuzatish)</button>
+            <button
+              className="nav-tab active"
+              onClick={() => { window.location.hash = '#admin'; setIsAdmin(true); }}
+            >⚙ Admin</button>
+          </nav>
+        )}
       </header>
 
       {/* Main Container */}
-      <main className="app-main" style={!showAdminTab ? { paddingBottom: '16px' } : undefined}>
+      <main className="app-main" style={!isAdmin ? { paddingBottom: '16px' } : undefined}>
+
 
         {isAdmin ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -296,12 +280,8 @@ export default function App() {
               <div className="empty-state">
                 <div className="empty-state-icon">🏆</div>
                 <p style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Hozircha hech qanday turnir yo'q.</p>
-                <p style={{ fontSize: 13, marginTop: 8 }}>
-                  Turnir yaratish uchun{' '}
-                  <button className="btn btn-primary btn-sm" style={{ display: 'inline-flex' }}
-                    onClick={() => { window.location.hash = '#admin'; setIsAdmin(true); }}>
-                    Admin paneliga o'ting
-                  </button>
+                <p style={{ fontSize: 13, marginTop: 8, color: 'var(--c-muted)' }}>
+                  Tez orada yangi turnirlar tashkil etiladi. Sahifani kuzatib boring.
                 </p>
               </div>
             )}
@@ -309,25 +289,6 @@ export default function App() {
         )}
       </main>
 
-      {/* Sticky Bottom Navigation Bar for Mobile */}
-      {showAdminTab && (
-        <nav className="bottom-bar">
-          <button
-            className={`bottom-bar-tab${!isAdmin ? ' active' : ''}`}
-            onClick={() => { window.location.hash = ''; setIsAdmin(false); }}
-          >
-            <span className="tab-icon">👁</span>
-            <span>Kuzatish</span>
-          </button>
-          <button
-            className={`bottom-bar-tab${isAdmin ? ' active' : ''}`}
-            onClick={() => { window.location.hash = '#admin'; setIsAdmin(true); }}
-          >
-            <span className="tab-icon">⚙</span>
-            <span>Admin</span>
-          </button>
-        </nav>
-      )}
 
       {/* Footer (desktop only) */}
       <footer className="app-footer">

@@ -1522,6 +1522,11 @@ input, textarea, select {
   border-left: 3px solid var(--c-green);
 }
 
+.match-card.status-live {
+  border-left: 3px solid var(--c-blue);
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.15);
+}
+
 .match-card.status-ready {
   border-left: 3px solid #f59e0b;
 }
@@ -1535,5 +1540,6 @@ input, textarea, select {
   border-left: 3px solid var(--c-muted);
   opacity: 0.6;
 }
+
 
 

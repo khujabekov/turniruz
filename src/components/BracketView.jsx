@@ -116,21 +116,23 @@ export default function BracketView({ matches, teams, isAdmin, onMatchClick }) {
     if (closestIndex !== activeRoundIndex) setActiveRoundIndex(closestIndex);
   };
 
-  // Match status: 'bye', 'completed', 'ready', 'waiting'
+  // Match status: 'bye', 'completed', 'live', 'ready', 'waiting'
   const getMatchStatus = (match) => {
     const t1 = match.team1_id;
     const t2 = match.team2_id;
     const isBye = t1 && !t2 && match.round_number === 1;
     if (isBye) return 'bye';
-    if (match.winner_id) return 'completed';
+    if (match.is_completed) return 'completed';
+    if (t1 && t2 && (match.score1 !== null || match.score2 !== null)) return 'live';
     if (t1 && t2) return 'ready';
     return 'waiting';
   };
 
   const statusLabels = {
     bye: { text: 'Avtomatik O\'tish', color: 'var(--c-muted)', icon: '↪' },
-    completed: { text: 'Yakunlandi', color: 'var(--c-green)', icon: '✓' },
-    ready: { text: 'O\'ynash tayyor', color: '#f59e0b', icon: '⚡' },
+    completed: { text: 'Tugadi', color: 'var(--c-green)', icon: '✓' },
+    live: { text: 'Bo\'lyapti (Live)', color: '#3b82f6', icon: '⚽' },
+    ready: { text: 'Kutilmoqda (Tayyor)', color: '#f59e0b', icon: '⚡' },
     waiting: { text: 'Kutilmoqda', color: 'var(--c-muted)', icon: '⏳' }
   };
 

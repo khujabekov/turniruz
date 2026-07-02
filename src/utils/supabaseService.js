@@ -161,7 +161,7 @@ export async function createNewTournament(name, teamNames) {
  * Updates a match score and propagates the winner to the next round.
  * Handles cascading resets/corrections recursively.
  */
-export async function updateMatchResult(matchId, score1, score2, penalty1, penalty2, winnerId, oldWinnerId) {
+export async function updateMatchResult(matchId, score1, score2, penalty1, penalty2, winnerId, oldWinnerId, isCompleted = false) {
   // 1. Update the current match
   const { data: updatedMatch, error: updateError } = await supabase
     .from('matches')
@@ -170,7 +170,8 @@ export async function updateMatchResult(matchId, score1, score2, penalty1, penal
       score2: score2 !== '' && score2 !== null ? parseInt(score2) : null,
       penalty1: penalty1 !== '' && penalty1 !== null ? parseInt(penalty1) : null,
       penalty2: penalty2 !== '' && penalty2 !== null ? parseInt(penalty2) : null,
-      winner_id: winnerId || null
+      winner_id: winnerId || null,
+      is_completed: isCompleted
     })
     .eq('id', matchId)
     .select()
@@ -178,8 +179,11 @@ export async function updateMatchResult(matchId, score1, score2, penalty1, penal
 
   if (updateError) throw updateError;
 
-  // 2. Propagate winner or clear next rounds if winner changed
-  await propagateWinner(updatedMatch, winnerId, oldWinnerId);
+  // 2. Propagate winner or clear next rounds if winner changed or match is not fully completed yet
+  // If match is completed, propagate the actual winner.
+  // If match is NOT completed, we must ensure next match slot is null (reset if it had a team previously).
+  const targetWinnerId = isCompleted ? winnerId : null;
+  await propagateWinner(updatedMatch, targetWinnerId, oldWinnerId);
 
   return updatedMatch;
 }
@@ -233,12 +237,12 @@ async function propagateWinner(match, winnerId, oldWinnerId) {
 
   if (nextUpdateError) return;
 
-  // If winner has changed or was cleared, we must clear the score and winner of the next match
+  // If winner has changed or was cleared (or if match became uncompleted),
+  // we must clear the score, winner, and completion status of the next match
   // and recursively propagate this clearing forward.
+  const oldWinnerInNext = updatedNextMatch.winner_id;
   if (oldWinnerId && oldWinnerId !== winnerId) {
-    const nextMatchOldWinner = updatedNextMatch.winner_id;
-
-    // Reset scores & winner on the next match
+    // Reset scores, winner & completion on the next match
     const { data: clearedNextMatch, error: clearError } = await supabase
       .from('matches')
       .update({
@@ -246,7 +250,8 @@ async function propagateWinner(match, winnerId, oldWinnerId) {
         score2: null,
         penalty1: null,
         penalty2: null,
-        winner_id: null
+        winner_id: null,
+        is_completed: false
       })
       .eq('id', nextMatch.id)
       .select()
@@ -255,8 +260,8 @@ async function propagateWinner(match, winnerId, oldWinnerId) {
     if (clearError) return;
 
     // If the next match also had a winner, propagate the clearing recursively
-    if (nextMatchOldWinner) {
-      await propagateWinner(clearedNextMatch, null, nextMatchOldWinner);
+    if (oldWinnerInNext) {
+      await propagateWinner(clearedNextMatch, null, oldWinnerInNext);
     }
   }
 }

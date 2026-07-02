@@ -31,9 +31,9 @@ CREATE TABLE IF NOT EXISTS matches (
     score2 INTEGER,
     penalty1 INTEGER,
     penalty2 INTEGER,
-    winner_id UUID REFERENCES teams(id) ON DELETE SET NULL,
     next_match_id UUID REFERENCES matches(id) ON DELETE SET NULL,
     next_match_slot INTEGER, -- 1 for team1_id, 2 for team2_id
+    is_completed BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

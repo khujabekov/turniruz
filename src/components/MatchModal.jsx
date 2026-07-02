@@ -38,8 +38,7 @@ export default function MatchModal({ isOpen, onClose, match, team1, team2, onSav
 
   const isDraw = s1 !== '' && s2 !== '' && parseInt(s1) === parseInt(s2);
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
+  const handleAction = (isCompleted) => {
     if (s1 === '' || s2 === '') { setError('Iltimos, har ikkala hisobni kiriting.'); return; }
     if (isDraw) {
       if (p1 === '' || p2 === '') { setError("Durang holatda penalti hisobini kiriting."); return; }
@@ -51,13 +50,15 @@ export default function MatchModal({ isOpen, onClose, match, team1, team2, onSav
       score1: parseInt(s1), score2: parseInt(s2),
       penalty1: isDraw ? parseInt(p1) : null,
       penalty2: isDraw ? parseInt(p2) : null,
-      winnerId, oldWinnerId: match.winner_id
+      winnerId, oldWinnerId: match.winner_id,
+      isCompleted
     });
   };
 
   const handleReset = () => onSave({
     matchId: match.id, score1: null, score2: null,
-    penalty1: null, penalty2: null, winnerId: null, oldWinnerId: match.winner_id
+    penalty1: null, penalty2: null, winnerId: null, oldWinnerId: match.winner_id,
+    isCompleted: false
   });
 
   const winnerName = winnerId === team1?.id ? team1?.name : (winnerId === team2?.id ? team2?.name : null);
@@ -73,8 +74,13 @@ export default function MatchModal({ isOpen, onClose, match, team1, team2, onSav
         </div>
 
         {/* Body */}
-        <form onSubmit={handleSubmit} className="modal-body">
+        <form onSubmit={e => e.preventDefault()} className="modal-body">
           {error && <div className="alert-error">{error}</div>}
+          {match.is_completed && (
+            <div className="alert-success" style={{ fontSize: 12, padding: '8px 12px', textAlign: 'center', marginBottom: 12 }}>
+              ✓ Ushbu o'yin rasman yakunlangan.
+            </div>
+          )}
 
           {/* Team rows */}
           {[
@@ -132,14 +138,30 @@ export default function MatchModal({ isOpen, onClose, match, team1, team2, onSav
           )}
 
           {/* Action buttons */}
-          <div className="modal-actions">
+          <div className="modal-actions" style={{ gap: 8, flexWrap: 'wrap' }}>
             <button type="button" className="btn btn-ghost btn-sm"
               onClick={handleReset}
-              disabled={match.score1 == null && match.score2 == null}
-            >Reset</button>
+              disabled={match.score1 == null && match.score2 == null && !match.is_completed}
+            >Tozalash</button>
             <div style={{ flex: 1 }} />
-            <button type="button" className="btn btn-ghost" onClick={onClose}>Bekor</button>
-            <button type="submit" className="btn btn-primary" disabled={!team1 || !team2}>Saqlash</button>
+            <button type="button" className="btn btn-ghost" onClick={onClose}>Bekor qilish</button>
+            
+            <button 
+              type="button" 
+              className="btn btn-secondary" 
+              disabled={!team1 || !team2 || s1 === '' || s2 === ''} 
+              onClick={() => handleAction(false)}
+            >
+              Hisobni Saqlash (Live)
+            </button>
+            <button 
+              type="button" 
+              className="btn btn-primary" 
+              disabled={!team1 || !team2 || s1 === '' || s2 === ''} 
+              onClick={() => handleAction(true)}
+            >
+              🏁 Tugadi (Yakunlash)
+            </button>
           </div>
         </form>
       </div>
