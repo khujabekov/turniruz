@@ -10,8 +10,28 @@ export default function AdminPanel({ onSelectTournament, activeTournamentId }) {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
+  const [tDetails, setTDetails] = useState({});
+
   const load = async () => {
-    try { setTournaments(await fetchTournaments()); } catch (e) { console.error(e); }
+    try {
+      const tours = await fetchTournaments();
+      setTournaments(tours);
+      
+      // Fetch team counts for each tournament
+      const counts = {};
+      for (const t of tours) {
+        const { count, error: countErr } = await supabase
+          .from('teams')
+          .select('*', { count: 'exact', head: true })
+          .eq('tournament_id', t.id);
+        if (!countErr) {
+          counts[t.id] = count || 0;
+        }
+      }
+      setTDetails(counts);
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   useEffect(() => {
@@ -22,6 +42,30 @@ export default function AdminPanel({ onSelectTournament, activeTournamentId }) {
       .subscribe();
     return () => supabase.removeChannel(ch);
   }, []);
+
+  const handleRename = async (id, currentName, e) => {
+    e.stopPropagation();
+    const newName = window.prompt("Turnir uchun yangi nom kiriting:", currentName);
+    if (!newName || !newName.trim() || newName.trim() === currentName) return;
+
+    try {
+      const { error: renameErr } = await supabase
+        .from('tournaments')
+        .update({ name: newName.trim() })
+        .eq('id', id);
+      if (renameErr) throw renameErr;
+      load();
+    } catch (err) {
+      alert("Xatolik: " + err.message);
+    }
+  };
+
+  const handleCopyLink = (id, e) => {
+    e.stopPropagation();
+    const adminLink = `${window.location.origin}/#admin`;
+    navigator.clipboard.writeText(adminLink);
+    alert("Admin paneli havolasi clipboardga nusxalandi! Rejimga o'tish uchun brauzerda oching.");
+  };
 
   const handleCreate = async (e) => {
     e.preventDefault();
@@ -186,6 +230,7 @@ export default function AdminPanel({ onSelectTournament, activeTournamentId }) {
             {tournaments.map(t => {
               const isActive = activeTournamentId === t.id;
               const statusClass = t.status === 'completed' ? 'status-complete' : t.status === 'active' ? 'status-active' : 'status-draft';
+              const teamCountVal = tDetails[t.id] || 0;
               return (
                 <div
                   key={t.id}
@@ -199,11 +244,29 @@ export default function AdminPanel({ onSelectTournament, activeTournamentId }) {
                     {t.status === 'completed' ? '🥇' : '⚽'}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 700, fontSize: 14, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.name}</div>
-                    <div style={{ fontSize: 10, color: 'var(--c-muted)', marginTop: 2 }}>{new Date(t.created_at).toLocaleDateString()}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <div style={{ fontWeight: 700, fontSize: 14, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.name}</div>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        onClick={e => handleRename(t.id, t.name, e)}
+                        title="Nomini o'zgartirish"
+                        style={{ padding: '2px 4px', fontSize: 10, minWidth: 'auto', minHeight: 'auto' }}
+                      >✏️</button>
+                    </div>
+                    <div style={{ fontSize: 10, color: 'var(--c-muted)', marginTop: 2, display: 'flex', gap: 8 }}>
+                      <span>{new Date(t.created_at).toLocaleDateString()}</span>
+                      <span>•</span>
+                      <span style={{ color: 'var(--c-green)' }}>{teamCountVal} ta jamoa</span>
+                    </div>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                    <span className={`status-badge ${statusClass}`}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      onClick={e => handleCopyLink(t.id, e)}
+                      title="Havolani nusxalash"
+                      style={{ padding: '4px 8px', minWidth: '36px', minHeight: '36px' }}
+                    >🔗</button>
+                    <span className={`status-badge ${statusClass}`} style={{ fontSize: 9 }}>
                       {t.status === 'completed' ? 'Yakunlandi' : 'Faol'}
                     </span>
                     <button

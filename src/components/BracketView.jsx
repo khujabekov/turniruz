@@ -31,7 +31,7 @@ export default function BracketView({ matches, teams, isAdmin, onMatchClick }) {
     if (diff === 0) return 'Final';
     if (diff === 1) return 'Yarim Final';
     if (diff === 2) return 'Chorak Final';
-    if (diff === 3) return 'Nimchorak Final';
+    if (diff === 3) return '1/8 Final';
     return `1/${Math.pow(2, diff)} Final`;
   };
 
@@ -62,9 +62,7 @@ export default function BracketView({ matches, teams, isAdmin, onMatchClick }) {
   }, [rounds.length, matches, hoveredTeamId]);
 
   useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768);
-    };
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
@@ -94,21 +92,17 @@ export default function BracketView({ matches, teams, isAdmin, onMatchClick }) {
   const finalMatch = rounds[rounds.length - 1]?.matches[0];
   const champion = finalMatch?.winner_id ? teamsMap.get(finalMatch.winner_id) : null;
 
-  // Scroll to a specific round column
+  // Mobile scroll helpers
   const scrollToRound = (index) => {
     if (!containerRef.current) return;
     const columns = containerRef.current.querySelectorAll('.bracket-round-col');
     const targetColumn = columns[index];
     if (targetColumn) {
-      containerRef.current.scrollTo({
-        left: targetColumn.offsetLeft - 12, // subtle padding offset
-        behavior: 'smooth'
-      });
+      containerRef.current.scrollTo({ left: targetColumn.offsetLeft - 12, behavior: 'smooth' });
       setActiveRoundIndex(index);
     }
   };
 
-  // Sync index on manual swipe/scroll
   const handleScroll = () => {
     if (!containerRef.current) return;
     const scrollLeft = containerRef.current.scrollLeft;
@@ -117,40 +111,54 @@ export default function BracketView({ matches, teams, isAdmin, onMatchClick }) {
     let minDistance = Infinity;
     columns.forEach((col, idx) => {
       const distance = Math.abs(col.offsetLeft - 12 - scrollLeft);
-      if (distance < minDistance) {
-        minDistance = distance;
-        closestIndex = idx;
-      }
+      if (distance < minDistance) { minDistance = distance; closestIndex = idx; }
     });
-    if (closestIndex !== activeRoundIndex) {
-      setActiveRoundIndex(closestIndex);
-    }
+    if (closestIndex !== activeRoundIndex) setActiveRoundIndex(closestIndex);
+  };
+
+  // Match status: 'bye', 'completed', 'ready', 'waiting'
+  const getMatchStatus = (match) => {
+    const t1 = match.team1_id;
+    const t2 = match.team2_id;
+    const isBye = t1 && !t2 && match.round_number === 1;
+    if (isBye) return 'bye';
+    if (match.winner_id) return 'completed';
+    if (t1 && t2) return 'ready';
+    return 'waiting';
+  };
+
+  const statusLabels = {
+    bye: { text: 'Avtomatik O\'tish', color: 'var(--c-muted)', icon: '↪' },
+    completed: { text: 'Yakunlandi', color: 'var(--c-green)', icon: '✓' },
+    ready: { text: 'O\'ynash tayyor', color: '#f59e0b', icon: '⚡' },
+    waiting: { text: 'Kutilmoqda', color: 'var(--c-muted)', icon: '⏳' }
   };
 
   const renderMatchCard = (match) => {
     const t1 = match.team1_id ? teamsMap.get(match.team1_id) : null;
     const t2 = match.team2_id ? teamsMap.get(match.team2_id) : null;
-    const isBye = t1 && !t2 && match.round_number === 1;
+    const status = getMatchStatus(match);
+    const statusInfo = statusLabels[status];
     const t1Wins = match.winner_id && match.winner_id === match.team1_id;
     const t2Wins = match.winner_id && match.winner_id === match.team2_id;
     const h1 = hoveredTeamId && match.team1_id === hoveredTeamId;
     const h2 = hoveredTeamId && match.team2_id === hoveredTeamId;
-    const clickable = isAdmin && t1 && t2;
-
-    const dateStr = match.created_at ? new Date(match.created_at).toLocaleDateString('uz-UZ', { month: 'short', day: 'numeric' }) : 'TBD';
-    const timeStr = match.created_at ? new Date(match.created_at).toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' }) : '00:00';
+    const clickable = isAdmin && t1 && t2 && status !== 'bye';
 
     return (
       <div
         key={match.id}
         data-mid={match.id}
-        className={`match-card${clickable ? ' clickable' : ''}`}
+        className={`match-card${clickable ? ' clickable' : ''} status-${status}`}
         onClick={() => clickable && onMatchClick(match)}
         style={{ margin: '12px 0' }}
       >
+        {/* Status header */}
         <div className="match-card-header">
-          <span>O'yin #{match.match_order}</span>
-          <span>{dateStr}, {timeStr}</span>
+          <span>{statusInfo.icon} O'yin #{match.match_order}</span>
+          <span className="match-status-badge" style={{ color: statusInfo.color }}>
+            {statusInfo.text}
+          </span>
         </div>
 
         {clickable && <div className="edit-badge">✎ KIRITISH</div>}
@@ -165,7 +173,8 @@ export default function BracketView({ matches, teams, isAdmin, onMatchClick }) {
             {t1 ? t1.name.substring(0, 2).toUpperCase() : '?'}
           </div>
           <span className={`team-name${t1Wins ? ' winner-text' : ''}${!t1 ? ' placeholder' : ''}`}>
-            {t1 ? t1.name : (match.round_number === 1 ? 'Kutilmoqda' : "G'olib kutilmoqda")}
+            {t1 ? t1.name : "G'olib kutilmoqda"}
+            {t1Wins && ' 🏆'}
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             {match.penalty1 != null && <span className="pen-badge">({match.penalty1})</span>}
@@ -184,15 +193,16 @@ export default function BracketView({ matches, teams, isAdmin, onMatchClick }) {
           onMouseLeave={() => setHoveredTeamId(null)}
         >
           <div className={`avatar${t2Wins ? ' winner-av' : ''}`}>
-            {isBye ? '–' : (t2 ? t2.name.substring(0, 2).toUpperCase() : '?')}
+            {status === 'bye' ? '–' : (t2 ? t2.name.substring(0, 2).toUpperCase() : '?')}
           </div>
-          <span className={`team-name${t2Wins ? ' winner-text' : ''}${(!t2 || isBye) ? ' placeholder' : ''}`}>
-            {isBye ? "BO'SH RAUND (Bye)" : (t2 ? t2.name : (match.round_number === 1 ? 'Kutilmoqda' : "G'olib kutilmoqda"))}
+          <span className={`team-name${t2Wins ? ' winner-text' : ''}${(!t2 || status === 'bye') ? ' placeholder' : ''}`}>
+            {status === 'bye' ? "BO'SH (Bye)" : (t2 ? t2.name : "G'olib kutilmoqda")}
+            {t2Wins && ' 🏆'}
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             {match.penalty2 != null && <span className="pen-badge">({match.penalty2})</span>}
             <span className={`score${t2Wins ? ' winner-score' : ''}`}>
-              {isBye ? '' : (match.score2 != null ? match.score2 : '–')}
+              {status === 'bye' ? '' : (match.score2 != null ? match.score2 : '–')}
             </span>
           </div>
         </div>
@@ -200,8 +210,59 @@ export default function BracketView({ matches, teams, isAdmin, onMatchClick }) {
     );
   };
 
+  // Bracket view (shared for desktop and mobile)
+  const renderBracketContent = () => (
+    <>
+      <svg
+        style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none', zIndex: 0 }}
+        width={svgSize.w}
+        height={svgSize.h}
+      >
+        {lines.map((ln, i) => (
+          <path key={i} d={ln.d} className={`bracket-connector${ln.active ? ' active' : ''}`} />
+        ))}
+      </svg>
+
+      {rounds.map(round => (
+        <div key={round.roundNumber} className="bracket-round-col">
+          <div className="round-title">{getRoundName(round.roundNumber)}</div>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-around', gap: 24, width: '100%', paddingTop: 8 }}>
+            {round.matches.map(match => renderMatchCard(match))}
+          </div>
+        </div>
+      ))}
+    </>
+  );
+
+  // Stats for spectator view
+  const totalMatches = matches.filter(m => getMatchStatus(m) !== 'bye').length;
+  const completedMatches = matches.filter(m => getMatchStatus(m) === 'completed' && !(m.team1_id && !m.team2_id && m.round_number === 1)).length;
+  const progressPercent = totalMatches > 0 ? Math.round((completedMatches / totalMatches) * 100) : 0;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20, width: '100%' }}>
+
+      {/* Turnir statistikasi */}
+      <div className="bracket-stats-bar fade-in">
+        <div className="bracket-stat">
+          <span className="bracket-stat-value">{teams.length}</span>
+          <span className="bracket-stat-label">Jamoalar</span>
+        </div>
+        <div className="bracket-stat">
+          <span className="bracket-stat-value">{totalRounds}</span>
+          <span className="bracket-stat-label">Bosqichlar</span>
+        </div>
+        <div className="bracket-stat">
+          <span className="bracket-stat-value">{completedMatches}/{totalMatches}</span>
+          <span className="bracket-stat-label">O'yinlar</span>
+        </div>
+        <div className="bracket-stat">
+          <div className="bracket-progress-bar">
+            <div className="bracket-progress-fill" style={{ width: `${progressPercent}%` }} />
+          </div>
+          <span className="bracket-stat-label">{progressPercent}% tugallandi</span>
+        </div>
+      </div>
 
       {champion && (
         <div className="champion-banner fade-in" style={{ maxWidth: 500, margin: '0 auto', width: '100%' }}>
@@ -215,23 +276,19 @@ export default function BracketView({ matches, teams, isAdmin, onMatchClick }) {
       )}
 
       {isMobile ? (
-        /* Mobile tree representation with round slider navigation */
         <div className="bracket-mobile-wrapper slide-in-r">
           <div className="bracket-mobile-header">
-            <div className="bracket-mobile-title">Knockout</div>
+            <div className="bracket-mobile-title">Turnir Setkasi</div>
             <div className="bracket-mobile-nav">
               <button
                 className="bracket-nav-btn"
                 disabled={activeRoundIndex === 0}
                 onClick={() => scrollToRound(activeRoundIndex - 1)}
-              >
-                &lt;
-              </button>
+              >&lt;</button>
               <div className="bracket-nav-rounds">
                 {rounds.map((round, idx) => {
                   const isActive = idx === activeRoundIndex;
                   const isAdjacent = Math.abs(idx - activeRoundIndex) === 1;
-                  // Show only active and adjacent rounds to fit mobile screen gracefully
                   if (!isActive && !isAdjacent) return null;
                   return (
                     <span
@@ -248,69 +305,26 @@ export default function BracketView({ matches, teams, isAdmin, onMatchClick }) {
                 className="bracket-nav-btn"
                 disabled={activeRoundIndex === rounds.length - 1}
                 onClick={() => scrollToRound(activeRoundIndex + 1)}
-              >
-                &gt;
-              </button>
+              >&gt;</button>
             </div>
           </div>
 
-          <div
-            ref={containerRef}
-            onScroll={handleScroll}
-            className="bracket-scroll-container"
-          >
-            <svg
-              style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none', zIndex: 0 }}
-              width={svgSize.w}
-              height={svgSize.h}
-            >
-              {lines.map((ln, i) => (
-                <path key={i} d={ln.d} className={`bracket-connector${ln.active ? ' active' : ''}`} />
-              ))}
-            </svg>
-
-            {rounds.map(round => (
-              <div key={round.roundNumber} className="bracket-round-col">
-                <div className="round-title">{getRoundName(round.roundNumber)}</div>
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-around', gap: 24, width: '100%', paddingTop: 8 }}>
-                  {round.matches.map(match => renderMatchCard(match))}
-                </div>
-              </div>
-            ))}
+          <div ref={containerRef} onScroll={handleScroll} className="bracket-scroll-container">
+            {renderBracketContent()}
           </div>
         </div>
       ) : (
-        /* Desktop Tree View */
-        <div
-          ref={containerRef}
-          className="bracket-desktop"
-        >
-          <svg
-            style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none', zIndex: 0 }}
-            width={svgSize.w}
-            height={svgSize.h}
-          >
-            {lines.map((ln, i) => (
-              <path key={i} d={ln.d} className={`bracket-connector${ln.active ? ' active' : ''}`} />
-            ))}
-          </svg>
-
-          {rounds.map(round => (
-            <div key={round.roundNumber} className="bracket-round-col">
-              <div className="round-title">{getRoundName(round.roundNumber)}</div>
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-around', gap: 24, width: '100%', paddingTop: 8 }}>
-                {round.matches.map(match => renderMatchCard(match))}
-              </div>
-            </div>
-          ))}
+        <div ref={containerRef} className="bracket-desktop">
+          {renderBracketContent()}
         </div>
       )}
 
       {/* Legend */}
       <div className="legend-bar">
         <span>🟢 G'olib jamoa</span>
-        <span style={{ color: 'var(--c-gold)' }}>🟡 (N) = Penaltilar natijasi</span>
-        {isAdmin && <span style={{ color: 'var(--c-green)' }}>✎ O'yin ustiga bosib hisob kiriting</span>}
+        <span style={{ color: 'var(--c-gold)' }}>🟡 (N) = Penaltilar</span>
+        <span style={{ color: '#f59e0b' }}>⚡ O'ynash tayyor</span>
+        {isAdmin && <span style={{ color: 'var(--c-green)' }}>✎ Ustiga bosing</span>}
       </div>
     </div>
   );

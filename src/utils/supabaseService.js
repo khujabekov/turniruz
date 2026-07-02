@@ -186,10 +186,11 @@ export async function updateMatchResult(matchId, score1, score2, penalty1, penal
 
 /**
  * Helper function to recursively propagate match results or clear future match slots.
+ * match_order odd → team1_id, match_order even → team2_id in the next match.
  */
 async function propagateWinner(match, winnerId, oldWinnerId) {
   if (!match.next_match_id) {
-    // This is the final match. If winnerId is set, we can optionally mark the tournament as completed.
+    // This is the final match.
     if (winnerId) {
       await supabase
         .from('tournaments')
@@ -213,20 +214,13 @@ async function propagateWinner(match, winnerId, oldWinnerId) {
 
   if (error || !nextMatch) return;
 
-  // Set up the update data
+  // Determine slot: odd match_order → team1, even → team2
+  const isTeam1Slot = match.match_order % 2 !== 0;
   const updatePayload = {};
-  if (match.next_match_slot === 1) {
+  if (isTeam1Slot) {
     updatePayload.team1_id = winnerId;
-  } else if (match.next_match_slot === 2) {
-    updatePayload.team2_id = winnerId;
   } else {
-    // Fallback to older binary tree logic
-    const isTeam1Slot = match.match_order % 2 !== 0;
-    if (isTeam1Slot) {
-      updatePayload.team1_id = winnerId;
-    } else {
-      updatePayload.team2_id = winnerId;
-    }
+    updatePayload.team2_id = winnerId;
   }
 
   // Update next match's team slot
@@ -266,3 +260,4 @@ async function propagateWinner(match, winnerId, oldWinnerId) {
     }
   }
 }
+
