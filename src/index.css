@@ -1435,12 +1435,15 @@ input, textarea, select {
 
 /* Snap items for mobile rounds */
 @media (max-width: 767px) {
+  .bracket-scroll-container {
+    gap: 12px;
+    scroll-snap-type: none; /* disable snapping for better 2-column scroll */
+  }
   .bracket-scroll-container .bracket-round-col {
-    scroll-snap-align: start;
-    scroll-snap-stop: always;
-    min-width: 275px;
-    width: 82vw;
+    min-width: 150px;
+    width: 46vw;
     flex-shrink: 0;
+    scroll-snap-align: none;
   }
 }
 

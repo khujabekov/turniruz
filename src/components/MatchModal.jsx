@@ -6,7 +6,6 @@ export default function MatchModal({ isOpen, onClose, match, team1, team2, onSav
   const [p1, setP1] = useState(0);
   const [p2, setP2] = useState(0);
   const [winnerId, setWinnerId] = useState('');
-  const [status, setStatus] = useState('waiting');
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -16,7 +15,6 @@ export default function MatchModal({ isOpen, onClose, match, team1, team2, onSav
       setP1(match.penalty1 != null ? match.penalty1 : 0);
       setP2(match.penalty2 != null ? match.penalty2 : 0);
       setWinnerId(match.winner_id || '');
-      setStatus(match.match_status || 'waiting');
       setError('');
     }
   }, [match?.id]);
@@ -37,10 +35,10 @@ export default function MatchModal({ isOpen, onClose, match, team1, team2, onSav
   if (!isOpen || !match) return null;
 
   const isDraw = s1 === s2;
+  const isCompleted = match.is_completed;
 
-  // Save changes locally and send to database
-  const handleSaveClick = (isFinal = false) => {
-    if (isDraw && status === 'penalties' && p1 === p2) {
+  const handleSaveClick = (finalize = false) => {
+    if (isDraw && p1 === p2 && finalize) {
       setError("Penaltilar g'olibi aniqlanishi kerak.");
       return;
     }
@@ -53,7 +51,7 @@ export default function MatchModal({ isOpen, onClose, match, team1, team2, onSav
       else if (p2 > p1) currentWinner = match.team2_id || '';
     }
 
-    if (isFinal && !currentWinner) {
+    if (finalize && !currentWinner) {
       setError("G'olib aniqlanmadi.");
       return;
     }
@@ -67,54 +65,9 @@ export default function MatchModal({ isOpen, onClose, match, team1, team2, onSav
       penalty2: isDraw ? p2 : null,
       winnerId: currentWinner || null,
       oldWinnerId: match.winner_id,
-      isCompleted: isFinal,
-      matchStatus: isFinal ? 'completed' : status
+      isCompleted: finalize,
+      matchStatus: finalize ? 'completed' : 'live'
     });
-  };
-
-  // Up/Down adjusters (Local Only, No Auto-Save)
-  const changeScore1 = (val) => {
-    const nextVal = Math.max(0, s1 + val);
-    setS1(nextVal);
-    if (status === 'waiting') {
-      setStatus('live');
-    }
-  };
-
-  const changeScore2 = (val) => {
-    const nextVal = Math.max(0, s2 + val);
-    setS2(nextVal);
-    if (status === 'waiting') {
-      setStatus('live');
-    }
-  };
-
-  const changePenalty1 = (val) => {
-    const nextVal = Math.max(0, p1 + val);
-    setP1(nextVal);
-  };
-
-  const changePenalty2 = (val) => {
-    const nextVal = Math.max(0, p2 + val);
-    setP2(nextVal);
-  };
-
-  // Phase transition actions (Local Only)
-  const handleFinishNormalTime = () => {
-    if (isDraw) {
-      setStatus('penalties');
-    } else {
-      setStatus('normal_ended');
-    }
-  };
-
-  const handleFinishPenalties = () => {
-    if (p1 === p2) {
-      setError("Penaltilar seriyasida durang bo'lishi mumkin emas. G'olib aniqlanishi shart.");
-      return;
-    }
-    setError('');
-    setStatus('normal_ended');
   };
 
   const handleReset = () => {
@@ -131,194 +84,128 @@ export default function MatchModal({ isOpen, onClose, match, team1, team2, onSav
     });
   };
 
-  const winnerName = winnerId === team1?.id ? team1?.name : (winnerId === team2?.id ? team2?.name : null);
-
-  // Status stage titles
-  const getStageHeader = () => {
-    if (status === 'completed') return '🏆 O\'yin Yakunlandi';
-    if (status === 'penalties') return '🎯 Penaltilar Seriyasi';
-    if (status === 'normal_ended') return '⏱ Asosiy Vaqt Tugadi';
-    if (status === 'live') return '⚽ Asosiy Vaqt Ketmoqda';
-    return '⏳ Boshlanmagan';
-  };
-
-  // Show penalties section if explicitly in penalties phase or if penalty values exist
-  const showPenalties = status === 'penalties' || (match.penalty1 != null || match.penalty2 != null);
-
   return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal-box">
-
+      <div className="modal-box" style={{ maxWidth: 360, padding: 20 }}>
         {/* Header */}
-        <div className="modal-header">
-          <h3>O'yin Natijasini Boshqarish</h3>
-          <button onClick={onClose} className="modal-close-btn">✕</button>
+        <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, paddingBottom: 10, borderBottom: '1px solid var(--c-border)' }}>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>O'yin Natijasi</h3>
+          <button onClick={onClose} className="modal-close-btn" style={{ border: 'none', background: 'none', fontSize: 18, color: 'var(--c-muted)', cursor: 'pointer' }}>✕</button>
         </div>
 
         {/* Body */}
         <div className="modal-body">
-          {error && <div className="alert-error" style={{ marginBottom: 12 }}>{error}</div>}
-
-          {/* Current Status Header Banner */}
-          <div style={{
-            textAlign: 'center',
-            fontSize: 13,
-            fontWeight: 800,
-            padding: '8px 16px',
-            borderRadius: 8,
-            marginBottom: 16,
-            background: status === 'completed' ? 'rgba(16, 185, 129, 0.15)' :
-                        status === 'penalties' ? 'rgba(245, 158, 11, 0.15)' :
-                        status === 'normal_ended' ? 'rgba(148, 163, 184, 0.15)' : 'rgba(59, 130, 246, 0.15)',
-            border: `1px solid ${
-              status === 'completed' ? 'var(--c-green)' :
-              status === 'penalties' ? 'var(--c-gold)' :
-              status === 'normal_ended' ? 'var(--c-muted)' : 'var(--c-blue)'
-            }`,
-            color: status === 'completed' ? 'var(--c-green)' :
-                   status === 'penalties' ? 'var(--c-gold)' : '#fff'
-          }}>
-            {getStageHeader()}
-          </div>
+          {error && <div className="alert-error" style={{ marginBottom: 12, padding: '8px 12px', borderRadius: 8, fontSize: 12 }}>{error}</div>}
 
           {/* Team Rows */}
           {[
-            { team: team1, score: s1, changeScore: changeScore1, teamId: match.team1_id },
-            { team: team2, score: s2, changeScore: changeScore2, teamId: match.team2_id }
-          ].map(({ team, score, changeScore, teamId }, idx) => {
+            { team: team1, score: s1, setScore: setS1, teamId: match.team1_id },
+            { team: team2, score: s2, setScore: setS2, teamId: match.team2_id }
+          ].map(({ team, score, setScore, teamId }, idx) => {
             const isWinner = winnerId === teamId;
-            const hasTeams = team1 && team2;
-            const scoreDisabled = !hasTeams || status === 'completed' || status === 'normal_ended' || status === 'penalties';
             return (
-              <div key={idx} className="modal-team-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0' }}>
-                <div className="modal-team-info" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div className={`avatar${isWinner && status === 'completed' ? ' winner-av' : ''}`} style={{ width: 32, height: 32, fontSize: 10 }}>
+              <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div className={`avatar${isWinner && isCompleted ? ' winner-av' : ''}`} style={{ width: 32, height: 32, fontSize: 10, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--c-border)', fontWeight: 700 }}>
                     {team ? team.name.substring(0, 2).toUpperCase() : '?'}
                   </div>
-                  <span className={`modal-team-name${isWinner && status === 'completed' ? ' winner' : ''}`} style={{ fontWeight: 700, fontSize: 14 }}>
+                  <span style={{ fontWeight: 700, fontSize: 14, color: isWinner && isCompleted ? 'var(--c-green)' : '#fff' }}>
                     {team ? team.name : 'Kutilmoqda'}
                   </span>
                 </div>
 
                 {/* Score controls */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <button 
-                    type="button" 
-                    className="counter-btn" 
-                    onClick={() => changeScore(-1)}
-                    disabled={scoreDisabled || score <= 0}
-                  >－</button>
-                  <span className="score-counter-val">{score}</span>
-                  <button 
-                    type="button" 
-                    className="counter-btn" 
-                    onClick={() => changeScore(1)}
-                    disabled={scoreDisabled}
-                  >＋</button>
-                </div>
+                {!isCompleted && team1 && team2 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <button 
+                      type="button" 
+                      className="counter-btn" 
+                      onClick={() => setScore(Math.max(0, score - 1))}
+                      disabled={score <= 0}
+                      style={{ width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--c-border)', background: 'transparent', color: '#fff', cursor: 'pointer' }}
+                    >－</button>
+                    <span style={{ fontSize: 16, fontWeight: 800, minWidth: 20, textAlign: 'center' }}>{score}</span>
+                    <button 
+                      type="button" 
+                      className="counter-btn" 
+                      onClick={() => setScore(score + 1)}
+                      style={{ width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--c-border)', background: 'transparent', color: '#fff', cursor: 'pointer' }}
+                    >＋</button>
+                  </div>
+                )}
+                {isCompleted && (
+                  <span style={{ fontSize: 18, fontWeight: 800, marginRight: 10 }}>{score}</span>
+                )}
               </div>
             );
           })}
 
-          {/* Penalties Section */}
-          {showPenalties && team1 && team2 && (
-            <div className="penalty-section" style={{ marginTop: 16, paddingTop: 16, borderTop: '1px dashed var(--c-border)' }}>
-              <div className="penalty-title" style={{ fontSize: 12, fontWeight: 800, color: 'var(--c-gold)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10, textAlign: 'center' }}>
+          {/* Penalties Section (Only if score is a draw) */}
+          {isDraw && team1 && team2 && (
+            <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px dashed var(--c-border)' }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--c-gold)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12, textAlign: 'center' }}>
                 🎯 Penaltilar Seriyasi
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-around', gap: 16 }}>
                 {[
-                  { team: team1, val: p1, change: changePenalty1 },
-                  { team: team2, val: p2, change: changePenalty2 }
-                ].map(({ team, val, change }, i) => {
-                  const penaltyDisabled = status === 'completed' || status === 'normal_ended';
-                  return (
-                    <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-                      <label style={{ fontSize: 11, color: 'var(--c-muted)', maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {team.name}
-                      </label>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  { team: team1, val: p1, setVal: setP1 },
+                  { team: team2, val: p2, setVal: setP2 }
+                ].map(({ team, val, setVal }, i) => (
+                  <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                    <label style={{ fontSize: 10, color: 'var(--c-muted)', maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {team.name}
+                    </label>
+                    {!isCompleted ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <button 
                           type="button" 
-                          className="counter-btn counter-btn-sm" 
-                          onClick={() => change(-1)}
-                          disabled={penaltyDisabled || val <= 0}
+                          className="counter-btn" 
+                          onClick={() => setVal(Math.max(0, val - 1))}
+                          disabled={val <= 0}
+                          style={{ width: 24, height: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--c-border)', background: 'transparent', color: '#fff', cursor: 'pointer', fontSize: 10 }}
                         >－</button>
-                        <span className="penalty-counter-val">{val}</span>
+                        <span style={{ fontSize: 14, fontWeight: 800 }}>{val}</span>
                         <button 
                           type="button" 
-                          className="counter-btn counter-btn-sm" 
-                          onClick={() => change(1)}
-                          disabled={penaltyDisabled}
+                          className="counter-btn" 
+                          onClick={() => setVal(val + 1)}
+                          style={{ width: 24, height: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--c-border)', background: 'transparent', color: '#fff', cursor: 'pointer', fontSize: 10 }}
                         >＋</button>
                       </div>
-                    </div>
-                  );
-                })}
+                    ) : (
+                      <span style={{ fontSize: 16, fontWeight: 800 }}>({val})</span>
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
           )}
 
-          {/* Winner banner */}
-          {winnerName && status === 'completed' && (
-            <div className="alert-success" style={{ textAlign: 'center', fontWeight: 800, marginTop: 16, fontSize: 13 }}>
-              🏆 G'olib: {winnerName}
-            </div>
-          )}
-
           {/* Action buttons */}
-          <div className="modal-actions" style={{ gap: 10, marginTop: 24, flexWrap: 'wrap' }}>
-            <button type="button" className="btn btn-ghost btn-sm"
-              onClick={handleReset}
-              disabled={match.score1 == null && match.score2 == null && status === 'waiting'}
-            >Tozalash</button>
-            <div style={{ flex: 1 }} />
-            <button type="button" className="btn btn-ghost" onClick={onClose}>
-              {status === 'completed' ? 'Yopish' : 'Bekor qilish'}
-            </button>
-
-            {/* Manual Save button */}
-            {status !== 'completed' && (
-              <button 
-                type="button" 
-                className="btn btn-secondary" 
-                onClick={() => handleSaveClick(false)}
-                style={{ fontWeight: 800 }}
-              >
-                💾 Saqlash
-              </button>
-            )}
-
-            {/* Stage button transitions */}
-            {status === 'live' && (
-              <button 
-                type="button" 
-                className="btn btn-secondary" 
-                onClick={handleFinishNormalTime}
-              >
-                ⏱ Asosiy Vaqtni Tugatish
-              </button>
-            )}
-
-            {status === 'penalties' && (
-              <button 
-                type="button" 
-                className="btn btn-gold" 
-                onClick={handleFinishPenalties}
-                style={{ background: 'var(--c-gold)', color: '#000', fontWeight: 800 }}
-              >
-                🎯 Penaltilarni Tugatish
-              </button>
-            )}
-
-            {status === 'normal_ended' && (
-              <button 
-                type="button" 
-                className="btn btn-primary" 
-                onClick={() => handleSaveClick(true)}
-              >
-                🏁 O'yinni Yakunlash
-              </button>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginTop: 24 }}>
+            {!isCompleted ? (
+              <>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={handleReset} style={{ fontSize: 12 }}>
+                  Tozalash
+                </button>
+                <div style={{ flex: 1 }} />
+                <button type="button" className="btn btn-secondary" onClick={() => handleSaveClick(false)} style={{ fontSize: 12, padding: '8px 12px' }}>
+                  💾 Saqlash
+                </button>
+                <button type="button" className="btn btn-primary" onClick={() => handleSaveClick(true)} style={{ fontSize: 12, padding: '8px 12px' }}>
+                  🏁 Yakunlash
+                </button>
+              </>
+            ) : (
+              <>
+                <button type="button" className="btn btn-danger btn-sm" onClick={handleReset} style={{ fontSize: 12 }}>
+                  Qayta ochish (Reset)
+                </button>
+                <div style={{ flex: 1 }} />
+                <button type="button" className="btn btn-ghost" onClick={onClose} style={{ fontSize: 12 }}>
+                  Yopish
+                </button>
+              </>
             )}
           </div>
         </div>

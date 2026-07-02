@@ -4,6 +4,8 @@ import { fetchTournaments, fetchTeams, fetchMatches, updateMatchResult } from '.
 import BracketView from './components/BracketView';
 import AdminPanel from './components/AdminPanel';
 import MatchModal from './components/MatchModal';
+import TournamentArchive from './components/TournamentArchive';
+import TeamRankings from './components/TeamRankings';
 
 export default function App() {
   const [isAdmin, setIsAdmin] = useState(window.location.hash === '#admin');
@@ -14,6 +16,7 @@ export default function App() {
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selMatch, setSelMatch] = useState(null);
+  const [viewTab, setViewTab] = useState('live'); // 'live' | 'archive' | 'rankings'
 
   // Authentication states for selected tournament
   const [isAdminAuthorized, setIsAdminAuthorized] = useState(false);
@@ -81,14 +84,10 @@ export default function App() {
           setMatches(await fetchMatches(activeId));
           const { data: t } = await supabase.from('tournaments').select('*').eq('id', activeId).single();
           if (t) setActiveTour(t);
-          // Sync open modal state with updated database values
-          if (payload.new && selMatch && payload.new.id === selMatch.id) {
-            setSelMatch(payload.new);
-          }
         })
       .subscribe();
     return () => supabase.removeChannel(ch);
-  }, [activeId, selMatch]);
+  }, [activeId]);
 
   // Sync auth status when activeId or passcodes change
   useEffect(() => {
@@ -257,42 +256,78 @@ export default function App() {
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            {/* Tournament picker */}
-            {tournaments.length > 0 && (
-              <div className="tour-picker">
-                <div className="tour-picker-info">
-                  <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--c-muted)', textTransform: 'uppercase', marginBottom: 4 }}>Turnirni Tanlang</div>
-                  <div style={{ fontWeight: 700, fontSize: 15, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{activeTour?.name || '…'}</div>
-                </div>
-                <select
-                  value={activeId || ''}
-                  onChange={e => setActiveId(e.target.value)}
-                  className="inp tour-picker-select"
-                >
-                  {tournaments.map(t => (
-                    <option key={t.id} value={t.id}>{t.name} ({t.status === 'completed' ? 'Yakunlangan' : 'Faol'})</option>
-                  ))}
-                </select>
-                <div className="tour-picker-live">
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--c-green)', display: 'inline-block', animation: 'ping2 1.5s ease-in-out infinite' }} />
-                  <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--c-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Jonli</span>
-                </div>
-              </div>
+            {/* View Tabs */}
+            <div className="spectator-tabs" style={{ display: 'flex', gap: 8, background: 'rgba(30, 41, 59, 0.4)', padding: 4, borderRadius: 10, border: '1px solid var(--c-border)', marginBottom: 8 }}>
+              <button
+                type="button"
+                onClick={() => setViewTab('live')}
+                className={`admin-tab-btn${viewTab === 'live' ? ' active' : ''}`}
+                style={{ flex: 1, padding: '10px', fontSize: 13, fontWeight: 700, borderRadius: 8, cursor: 'pointer', transition: 'all 0.2s ease', border: 'none' }}
+              >
+                ⚽ Jonli Turnir
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewTab('archive')}
+                className={`admin-tab-btn${viewTab === 'archive' ? ' active' : ''}`}
+                style={{ flex: 1, padding: '10px', fontSize: 13, fontWeight: 700, borderRadius: 8, cursor: 'pointer', transition: 'all 0.2s ease', border: 'none' }}
+              >
+                📁 Turnirlar Arxivi
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewTab('rankings')}
+                className={`admin-tab-btn${viewTab === 'rankings' ? ' active' : ''}`}
+                style={{ flex: 1, padding: '10px', fontSize: 13, fontWeight: 700, borderRadius: 8, cursor: 'pointer', transition: 'all 0.2s ease', border: 'none' }}
+              >
+                📊 Jamoalar Reytingi
+              </button>
+            </div>
+
+            {viewTab === 'live' && (
+              <>
+                {/* Tournament picker */}
+                {tournaments.length > 0 && (
+                  <div className="tour-picker">
+                    <div className="tour-picker-info">
+                      <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--c-muted)', textTransform: 'uppercase', marginBottom: 4 }}>Turnirni Tanlang</div>
+                      <div style={{ fontWeight: 700, fontSize: 15, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{activeTour?.name || '…'}</div>
+                    </div>
+                    <select
+                      value={activeId || ''}
+                      onChange={e => setActiveId(e.target.value)}
+                      className="inp tour-picker-select"
+                    >
+                      {tournaments.map(t => (
+                        <option key={t.id} value={t.id}>{t.name} ({t.status === 'completed' ? 'Yakunlangan' : 'Faol'})</option>
+                      ))}
+                    </select>
+                    <div className="tour-picker-live">
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--c-green)', display: 'inline-block', animation: 'ping2 1.5s ease-in-out infinite' }} />
+                      <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--c-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Jonli</span>
+                    </div>
+                  </div>
+                )}
+
+                {activeId ? (
+                  loading
+                    ? <div style={{ display: 'flex', justifyContent: 'center', padding: 80 }}><div className="spinner" /></div>
+                    : <BracketView matches={matches} teams={teams} isAdmin={false} />
+                ) : (
+                  <div className="empty-state">
+                    <div className="empty-state-icon">🏆</div>
+                    <p style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Hozircha hech qanday turnir yo'q.</p>
+                    <p style={{ fontSize: 13, marginTop: 8, color: 'var(--c-muted)' }}>
+                      Tez orada yangi turnirlar tashkil etiladi. Sahifani kuzatib boring.
+                    </p>
+                  </div>
+                )}
+              </>
             )}
 
-            {activeId ? (
-              loading
-                ? <div style={{ display: 'flex', justifyContent: 'center', padding: 80 }}><div className="spinner" /></div>
-                : <BracketView matches={matches} teams={teams} isAdmin={false} />
-            ) : (
-              <div className="empty-state">
-                <div className="empty-state-icon">🏆</div>
-                <p style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Hozircha hech qanday turnir yo'q.</p>
-                <p style={{ fontSize: 13, marginTop: 8, color: 'var(--c-muted)' }}>
-                  Tez orada yangi turnirlar tashkil etiladi. Sahifani kuzatib boring.
-                </p>
-              </div>
-            )}
+            {viewTab === 'archive' && <TournamentArchive />}
+
+            {viewTab === 'rankings' && <TeamRankings />}
           </div>
         )}
       </main>

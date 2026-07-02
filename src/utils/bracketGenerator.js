@@ -37,7 +37,7 @@ export function calculateBracketSize(N) {
  */
 export function generateMatchesForTournament(tournamentId, teams) {
   const N = teams.length;
-  if (N < 2) throw new Error("Turnir yaratish uchun kamida 2 ta jamoa kerak.");
+  if (N < 2) throw new Error("Turnir hosil qilish uchun kamida 2 ta jamoa kerak.");
 
   const { roundMatchCounts, roundsCount } = calculateBracketSize(N);
   const matchesByRound = [];

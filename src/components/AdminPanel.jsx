@@ -86,7 +86,7 @@ export default function AdminPanel({ onSelectTournament, activeTournamentId }) {
     setLoading(true);
     try {
       const t = await createNewTournament(name.trim(), teamNames);
-      setSuccess(`"${t.name}" turniri muvaffaqiyatli yaratildi!`);
+      setSuccess(`"${t.name}" turniri muvaffaqiyatli hosil qilindi!`);
       setName(''); setTeamsText('');
       onSelectTournament(t.id);
       load();
@@ -165,7 +165,7 @@ export default function AdminPanel({ onSelectTournament, activeTournamentId }) {
           className={`admin-tab-btn${activeTab === 'create' ? ' active' : ''}`}
           style={{ flex: 1, padding: '10px', fontSize: 13, fontWeight: 700, borderRadius: 8, cursor: 'pointer', transition: 'all 0.2s ease', border: 'none' }}
         >
-          ✨ Yangi Yaratish
+          ✨ Yangi hosil qilish
         </button>
       </div>
 
@@ -174,7 +174,7 @@ export default function AdminPanel({ onSelectTournament, activeTournamentId }) {
         <div className="glass admin-card fade-in" style={{ padding: 20, borderRadius: 16 }}>
           <div>
             <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#fff', display: 'flex', alignItems: 'center', gap: 8 }}>
-              ✨ Yangi Turnir Yaratish
+              ✨ Yangi turnir hosil qilish
             </h3>
             <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--c-muted)' }}>
               Jamoalar nomlarini qatorma-qator kiriting.
@@ -218,18 +218,7 @@ export default function AdminPanel({ onSelectTournament, activeTournamentId }) {
               />
             </div>
 
-            <div>
-              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--c-muted)', textTransform: 'uppercase', marginBottom: 8 }}>
-                Tezkor sinov:
-              </div>
-              <div className="quick-fill-grid">
-                {[8, 10, 12, 14, 16, 22].map(c => (
-                  <button key={c} type="button" className="btn btn-ghost btn-sm" onClick={() => fillMock(c)} disabled={loading}>
-                    {c} ta
-                  </button>
-                ))}
-              </div>
-            </div>
+
 
             <button type="submit" className="btn btn-primary" disabled={loading} style={{ width: '100%', marginTop: 4 }}>
               {loading
@@ -262,7 +251,7 @@ export default function AdminPanel({ onSelectTournament, activeTournamentId }) {
                 onClick={() => setActiveTab('create')}
                 style={{ marginTop: 12 }}
               >
-                + Yangi yaratish
+                + Yangi hosil qilish
               </button>
             </div>
           ) : (

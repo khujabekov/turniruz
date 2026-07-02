@@ -88,12 +88,14 @@ async function sendToTelegram(tournamentName, adminCode) {
 }
 
 /**
- * Helper to shuffle array (Fisher-Yates)
+ * Helper to shuffle array (Fisher-Yates) using cryptographically secure random values
  */
 function shuffleArray(array) {
   const arr = [...array];
+  const randomValues = new Uint32Array(1);
   for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    window.crypto.getRandomValues(randomValues);
+    const j = randomValues[0] % (i + 1);
     [arr[i], arr[j]] = [arr[j], arr[i]];
   }
   return arr;
@@ -305,6 +307,181 @@ async function propagateWinner(match, winnerId, oldWinnerId) {
       }
     }
   }
+}
+
+/**
+ * Fetch stats for all completed tournaments (Archive).
+ */
+export async function fetchArchiveStats() {
+  const { data: tournaments, error: tError } = await supabase
+    .from('tournaments')
+    .select('*')
+    .eq('status', 'completed')
+    .order('created_at', { ascending: false });
+  if (tError) throw tError;
+
+  const archive = [];
+  for (const t of tournaments) {
+    const { data: matches, error: mError } = await supabase
+      .from('matches')
+      .select('*')
+      .eq('tournament_id', t.id);
+    if (mError) continue;
+
+    const { data: teams, error: teamsError } = await supabase
+      .from('teams')
+      .select('*')
+      .eq('tournament_id', t.id);
+    if (teamsError) continue;
+
+    const teamMap = {};
+    teams.forEach(tm => { teamMap[tm.id] = tm.name; });
+
+    // Find the final match (which has no next_match_id and has highest round number)
+    const finalMatch = matches.find(m => m.next_match_id === null && m.round_number > 0);
+    const winnerName = finalMatch && finalMatch.winner_id ? (teamMap[finalMatch.winner_id] || 'Nomuvofiq') : 'Aniqlanmagan';
+
+    // Calculate goals per team
+    const teamGoals = {};
+    teams.forEach(tm => { teamGoals[tm.id] = 0; });
+    
+    let totalGoalsScored = 0;
+    let totalMatchesPlayed = 0;
+
+    matches.forEach(m => {
+      if (m.match_status === 'bye') return;
+      if (m.score1 != null) {
+        teamGoals[m.team1_id] = (teamGoals[m.team1_id] || 0) + m.score1;
+        totalGoalsScored += m.score1;
+      }
+      if (m.score2 != null) {
+        teamGoals[m.team2_id] = (teamGoals[m.team2_id] || 0) + m.score2;
+        totalGoalsScored += m.score2;
+      }
+      if (m.is_completed) {
+        totalMatchesPlayed++;
+      }
+    });
+
+    // Find top scoring team
+    let topScorerTeamId = null;
+    let maxGoals = -1;
+    Object.keys(teamGoals).forEach(teamId => {
+      if (teamGoals[teamId] > maxGoals) {
+        maxGoals = teamGoals[teamId];
+        topScorerTeamId = teamId;
+      }
+    });
+
+    const topScorerName = topScorerTeamId ? teamMap[topScorerTeamId] : 'Yo\'q';
+
+    archive.push({
+      id: t.id,
+      name: t.name,
+      createdAt: t.created_at,
+      winner: winnerName,
+      topScorer: topScorerName,
+      topScorerGoals: maxGoals > 0 ? maxGoals : 0,
+      totalMatches: totalMatchesPlayed,
+      totalGoals: totalGoalsScored,
+      teamsCount: teams.length
+    });
+  }
+
+  return archive;
+}
+
+/**
+ * Fetch global team rankings across all tournaments.
+ */
+export async function fetchGlobalTeamRankings() {
+  const { data: tournaments, error: tError } = await supabase
+    .from('tournaments')
+    .select('id, name, status');
+  if (tError) throw tError;
+
+  const { data: allTeams, error: teamsError } = await supabase
+    .from('teams')
+    .select('*');
+  if (teamsError) throw teamsError;
+
+  const { data: allMatches, error: matchesError } = await supabase
+    .from('matches')
+    .select('*')
+    .eq('is_completed', true);
+  if (matchesError) throw matchesError;
+
+  const teamIdToName = {};
+  allTeams.forEach(t => {
+    teamIdToName[t.id] = t.name;
+  });
+
+  const rankings = {};
+
+  allTeams.forEach(t => {
+    const cleanName = t.name.trim();
+    if (!rankings[cleanName]) {
+      rankings[cleanName] = {
+        name: cleanName,
+        tournamentsCount: 0,
+        matchesPlayed: 0,
+        wins: 0,
+        losses: 0,
+        goalsScored: 0,
+        points: 0,
+        tournamentsList: new Set()
+      };
+    }
+    rankings[cleanName].tournamentsList.add(t.tournament_id);
+  });
+
+  allMatches.forEach(m => {
+    const t1Name = teamIdToName[m.team1_id]?.trim();
+    const t2Name = teamIdToName[m.team2_id]?.trim();
+
+    if (m.match_status === 'bye') return;
+
+    if (t1Name && rankings[t1Name]) {
+      rankings[t1Name].matchesPlayed++;
+      if (m.score1 != null) {
+        rankings[t1Name].goalsScored += m.score1;
+      }
+      if (m.winner_id === m.team1_id) {
+        rankings[t1Name].wins++;
+        rankings[t1Name].points += 3;
+      } else {
+        rankings[t1Name].losses++;
+      }
+    }
+
+    if (t2Name && rankings[t2Name]) {
+      rankings[t2Name].matchesPlayed++;
+      if (m.score2 != null) {
+        rankings[t2Name].goalsScored += m.score2;
+      }
+      if (m.winner_id === m.team2_id) {
+        rankings[t2Name].wins++;
+        rankings[t2Name].points += 3;
+      } else {
+        rankings[t2Name].losses++;
+      }
+    }
+  });
+
+  const result = Object.values(rankings).map(r => {
+    r.tournamentsCount = r.tournamentsList.size;
+    r.points += r.tournamentsCount * 1; // 1 point for participation
+    delete r.tournamentsList;
+    return r;
+  });
+
+  result.sort((a, b) => {
+    if (b.points !== a.points) return b.points - a.points;
+    if (b.wins !== a.wins) return b.wins - a.wins;
+    return b.goalsScored - a.goalsScored;
+  });
+
+  return result;
 }
 
 
