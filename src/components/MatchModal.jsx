@@ -6,10 +6,8 @@ export default function MatchModal({ isOpen, onClose, match, team1, team2, onSav
   const [p1, setP1] = useState(0);
   const [p2, setP2] = useState(0);
   const [winnerId, setWinnerId] = useState('');
+  const [status, setStatus] = useState('waiting');
   const [error, setError] = useState('');
-
-  // Current stage: 'waiting', 'live', 'normal_ended', 'penalties', 'completed'
-  const currentStatus = match?.match_status || 'waiting';
 
   useEffect(() => {
     if (match) {
@@ -18,9 +16,10 @@ export default function MatchModal({ isOpen, onClose, match, team1, team2, onSav
       setP1(match.penalty1 != null ? match.penalty1 : 0);
       setP2(match.penalty2 != null ? match.penalty2 : 0);
       setWinnerId(match.winner_id || '');
+      setStatus(match.match_status || 'waiting');
       setError('');
     }
-  }, [match]);
+  }, [match?.id]);
 
   // Determine winner dynamically on score or penalty changes
   useEffect(() => {
@@ -39,63 +38,73 @@ export default function MatchModal({ isOpen, onClose, match, team1, team2, onSav
 
   const isDraw = s1 === s2;
 
-  // Helper to trigger database updates with current stage
-  const triggerAutoSave = (newS1, newS2, newP1, newP2, newStatus = 'live') => {
-    let currentWinner = '';
-    const draw = newS1 === newS2;
-    if (!draw) {
-      currentWinner = newS1 > newS2 ? (match.team1_id || '') : (match.team2_id || '');
-    } else {
-      if (newP1 > newP2) currentWinner = match.team1_id || '';
-      else if (newP2 > newP1) currentWinner = match.team2_id || '';
+  // Save changes locally and send to database
+  const handleSaveClick = (isFinal = false) => {
+    if (isDraw && status === 'penalties' && p1 === p2) {
+      setError("Penaltilar g'olibi aniqlanishi kerak.");
+      return;
     }
 
+    let currentWinner = '';
+    if (!isDraw) {
+      currentWinner = s1 > s2 ? (match.team1_id || '') : (match.team2_id || '');
+    } else {
+      if (p1 > p2) currentWinner = match.team1_id || '';
+      else if (p2 > p1) currentWinner = match.team2_id || '';
+    }
+
+    if (isFinal && !currentWinner) {
+      setError("G'olib aniqlanmadi.");
+      return;
+    }
+
+    setError('');
     onSave({
       matchId: match.id,
-      score1: newS1,
-      score2: newS2,
-      penalty1: draw ? newP1 : null,
-      penalty2: draw ? newP2 : null,
+      score1: s1,
+      score2: s2,
+      penalty1: isDraw ? p1 : null,
+      penalty2: isDraw ? p2 : null,
       winnerId: currentWinner || null,
       oldWinnerId: match.winner_id,
-      isCompleted: false, // Remains false until explicitly finalized via complete button
-      matchStatus: newStatus
+      isCompleted: isFinal,
+      matchStatus: isFinal ? 'completed' : status
     });
   };
 
-  // Up/Down adjusters
+  // Up/Down adjusters (Local Only, No Auto-Save)
   const changeScore1 = (val) => {
     const nextVal = Math.max(0, s1 + val);
     setS1(nextVal);
-    triggerAutoSave(nextVal, s2, p1, p2, 'live');
+    if (status === 'waiting') {
+      setStatus('live');
+    }
   };
 
   const changeScore2 = (val) => {
     const nextVal = Math.max(0, s2 + val);
     setS2(nextVal);
-    triggerAutoSave(s1, nextVal, p1, p2, 'live');
+    if (status === 'waiting') {
+      setStatus('live');
+    }
   };
 
   const changePenalty1 = (val) => {
     const nextVal = Math.max(0, p1 + val);
     setP1(nextVal);
-    triggerAutoSave(s1, s2, nextVal, p2, 'penalties');
   };
 
   const changePenalty2 = (val) => {
     const nextVal = Math.max(0, p2 + val);
     setP2(nextVal);
-    triggerAutoSave(s1, s2, p1, nextVal, 'penalties');
   };
 
-  // Phase transition actions
+  // Phase transition actions (Local Only)
   const handleFinishNormalTime = () => {
     if (isDraw) {
-      // Transition to penalty shootout
-      triggerAutoSave(s1, s2, p1, p2, 'penalties');
+      setStatus('penalties');
     } else {
-      // Direct transition to end of normal time
-      triggerAutoSave(s1, s2, null, null, 'normal_ended');
+      setStatus('normal_ended');
     }
   };
 
@@ -105,30 +114,7 @@ export default function MatchModal({ isOpen, onClose, match, team1, team2, onSav
       return;
     }
     setError('');
-    triggerAutoSave(s1, s2, p1, p2, 'normal_ended');
-  };
-
-  const handleFinalizeMatch = () => {
-    if (isDraw && p1 === p2) {
-      setError("O'yinni yakunlash uchun penaltilar g'olibi aniqlanishi kerak.");
-      return;
-    }
-    if (!winnerId) {
-      setError("G'olib aniqlanmadi.");
-      return;
-    }
-
-    onSave({
-      matchId: match.id,
-      score1: s1,
-      score2: s2,
-      penalty1: isDraw ? p1 : null,
-      penalty2: isDraw ? p2 : null,
-      winnerId,
-      oldWinnerId: match.winner_id,
-      isCompleted: true, // Officially closes and advances
-      matchStatus: 'completed'
-    });
+    setStatus('normal_ended');
   };
 
   const handleReset = () => {
@@ -149,12 +135,15 @@ export default function MatchModal({ isOpen, onClose, match, team1, team2, onSav
 
   // Status stage titles
   const getStageHeader = () => {
-    if (currentStatus === 'completed') return '🏆 O\'yin Yakunlandi';
-    if (currentStatus === 'penalties') return '🎯 Penaltilar Seriyasi';
-    if (currentStatus === 'normal_ended') return '⏱ Asosiy Vaqt Tugadi';
-    if (currentStatus === 'live') return '⚽ Asosiy Vaqt Ketmoqda';
+    if (status === 'completed') return '🏆 O\'yin Yakunlandi';
+    if (status === 'penalties') return '🎯 Penaltilar Seriyasi';
+    if (status === 'normal_ended') return '⏱ Asosiy Vaqt Tugadi';
+    if (status === 'live') return '⚽ Asosiy Vaqt Ketmoqda';
     return '⏳ Boshlanmagan';
   };
+
+  // Show penalties section if explicitly in penalties phase or if penalty values exist
+  const showPenalties = status === 'penalties' || (match.penalty1 != null || match.penalty2 != null);
 
   return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
@@ -178,16 +167,16 @@ export default function MatchModal({ isOpen, onClose, match, team1, team2, onSav
             padding: '8px 16px',
             borderRadius: 8,
             marginBottom: 16,
-            background: currentStatus === 'completed' ? 'rgba(16, 185, 129, 0.15)' :
-                        currentStatus === 'penalties' ? 'rgba(245, 158, 11, 0.15)' :
-                        currentStatus === 'normal_ended' ? 'rgba(148, 163, 184, 0.15)' : 'rgba(59, 130, 246, 0.15)',
+            background: status === 'completed' ? 'rgba(16, 185, 129, 0.15)' :
+                        status === 'penalties' ? 'rgba(245, 158, 11, 0.15)' :
+                        status === 'normal_ended' ? 'rgba(148, 163, 184, 0.15)' : 'rgba(59, 130, 246, 0.15)',
             border: `1px solid ${
-              currentStatus === 'completed' ? 'var(--c-green)' :
-              currentStatus === 'penalties' ? 'var(--c-gold)' :
-              currentStatus === 'normal_ended' ? 'var(--c-muted)' : 'var(--c-blue)'
+              status === 'completed' ? 'var(--c-green)' :
+              status === 'penalties' ? 'var(--c-gold)' :
+              status === 'normal_ended' ? 'var(--c-muted)' : 'var(--c-blue)'
             }`,
-            color: currentStatus === 'completed' ? 'var(--c-green)' :
-                   currentStatus === 'penalties' ? 'var(--c-gold)' : '#fff'
+            color: status === 'completed' ? 'var(--c-green)' :
+                   status === 'penalties' ? 'var(--c-gold)' : '#fff'
           }}>
             {getStageHeader()}
           </div>
@@ -199,14 +188,14 @@ export default function MatchModal({ isOpen, onClose, match, team1, team2, onSav
           ].map(({ team, score, changeScore, teamId }, idx) => {
             const isWinner = winnerId === teamId;
             const hasTeams = team1 && team2;
-            const scoreDisabled = !hasTeams || currentStatus === 'completed' || currentStatus === 'normal_ended' || currentStatus === 'penalties';
+            const scoreDisabled = !hasTeams || status === 'completed' || status === 'normal_ended' || status === 'penalties';
             return (
               <div key={idx} className="modal-team-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0' }}>
                 <div className="modal-team-info" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div className={`avatar${isWinner && currentStatus === 'completed' ? ' winner-av' : ''}`} style={{ width: 32, height: 32, fontSize: 10 }}>
+                  <div className={`avatar${isWinner && status === 'completed' ? ' winner-av' : ''}`} style={{ width: 32, height: 32, fontSize: 10 }}>
                     {team ? team.name.substring(0, 2).toUpperCase() : '?'}
                   </div>
-                  <span className={`modal-team-name${isWinner && currentStatus === 'completed' ? ' winner' : ''}`} style={{ fontWeight: 700, fontSize: 14 }}>
+                  <span className={`modal-team-name${isWinner && status === 'completed' ? ' winner' : ''}`} style={{ fontWeight: 700, fontSize: 14 }}>
                     {team ? team.name : 'Kutilmoqda'}
                   </span>
                 </div>
@@ -232,7 +221,7 @@ export default function MatchModal({ isOpen, onClose, match, team1, team2, onSav
           })}
 
           {/* Penalties Section */}
-          {((isDraw && currentStatus === 'penalties') || currentStatus === 'completed' || currentStatus === 'normal_ended') && isDraw && team1 && team2 && (
+          {showPenalties && team1 && team2 && (
             <div className="penalty-section" style={{ marginTop: 16, paddingTop: 16, borderTop: '1px dashed var(--c-border)' }}>
               <div className="penalty-title" style={{ fontSize: 12, fontWeight: 800, color: 'var(--c-gold)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10, textAlign: 'center' }}>
                 🎯 Penaltilar Seriyasi
@@ -242,7 +231,7 @@ export default function MatchModal({ isOpen, onClose, match, team1, team2, onSav
                   { team: team1, val: p1, change: changePenalty1 },
                   { team: team2, val: p2, change: changePenalty2 }
                 ].map(({ team, val, change }, i) => {
-                  const penaltyDisabled = currentStatus === 'completed' || currentStatus === 'normal_ended';
+                  const penaltyDisabled = status === 'completed' || status === 'normal_ended';
                   return (
                     <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
                       <label style={{ fontSize: 11, color: 'var(--c-muted)', maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -270,8 +259,8 @@ export default function MatchModal({ isOpen, onClose, match, team1, team2, onSav
             </div>
           )}
 
-          {/* Winner banner (only visible when completed or at end state) */}
-          {winnerName && currentStatus === 'completed' && (
+          {/* Winner banner */}
+          {winnerName && status === 'completed' && (
             <div className="alert-success" style={{ textAlign: 'center', fontWeight: 800, marginTop: 16, fontSize: 13 }}>
               🏆 G'olib: {winnerName}
             </div>
@@ -281,15 +270,27 @@ export default function MatchModal({ isOpen, onClose, match, team1, team2, onSav
           <div className="modal-actions" style={{ gap: 10, marginTop: 24, flexWrap: 'wrap' }}>
             <button type="button" className="btn btn-ghost btn-sm"
               onClick={handleReset}
-              disabled={match.score1 == null && match.score2 == null && currentStatus === 'waiting'}
+              disabled={match.score1 == null && match.score2 == null && status === 'waiting'}
             >Tozalash</button>
             <div style={{ flex: 1 }} />
             <button type="button" className="btn btn-ghost" onClick={onClose}>
-              {currentStatus === 'completed' ? 'Yopish' : 'Bekor qilish'}
+              {status === 'completed' ? 'Yopish' : 'Bekor qilish'}
             </button>
 
+            {/* Manual Save button */}
+            {status !== 'completed' && (
+              <button 
+                type="button" 
+                className="btn btn-secondary" 
+                onClick={() => handleSaveClick(false)}
+                style={{ fontWeight: 800 }}
+              >
+                💾 Saqlash
+              </button>
+            )}
+
             {/* Stage button transitions */}
-            {currentStatus === 'live' && (
+            {status === 'live' && (
               <button 
                 type="button" 
                 className="btn btn-secondary" 
@@ -299,7 +300,7 @@ export default function MatchModal({ isOpen, onClose, match, team1, team2, onSav
               </button>
             )}
 
-            {currentStatus === 'penalties' && (
+            {status === 'penalties' && (
               <button 
                 type="button" 
                 className="btn btn-gold" 
@@ -310,11 +311,11 @@ export default function MatchModal({ isOpen, onClose, match, team1, team2, onSav
               </button>
             )}
 
-            {currentStatus === 'normal_ended' && (
+            {status === 'normal_ended' && (
               <button 
                 type="button" 
                 className="btn btn-primary" 
-                onClick={handleFinalizeMatch}
+                onClick={() => handleSaveClick(true)}
               >
                 🏁 O'yinni Yakunlash
               </button>

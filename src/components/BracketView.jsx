@@ -150,10 +150,10 @@ export default function BracketView({ matches, teams, isAdmin, onMatchClick }) {
     const h2 = hoveredTeamId && match.team2_id === hoveredTeamId;
     const clickable = isAdmin && t1 && t2 && status !== 'bye';
 
-    // Show penalties only in penalties stage or if completed
-    const showPenalties = match.match_status === 'penalties' || match.match_status === 'completed';
-    const p1Val = match.penalty1 != null ? match.penalty1 : (showPenalties ? 0 : null);
-    const p2Val = match.penalty2 != null ? match.penalty2 : (showPenalties ? 0 : null);
+    // Show penalties only in penalties stage or if they are not null
+    const showPenalties = match.match_status === 'penalties' || (match.penalty1 != null || match.penalty2 != null);
+    const p1Val = match.penalty1 != null ? match.penalty1 : (match.match_status === 'penalties' ? 0 : null);
+    const p2Val = match.penalty2 != null ? match.penalty2 : (match.match_status === 'penalties' ? 0 : null);
 
     return (
       <div

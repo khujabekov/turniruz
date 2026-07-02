@@ -63,7 +63,9 @@ async function sendToTelegram(tournamentName, adminCode) {
     console.warn('Telegram Bot Token yoki Chat ID topilmadi. Telegram xabar yuborilmadi.');
     return;
   }
-  const text = `🏆 <b>Yangi mini-futbol turniri yaratildi!</b>\n\n📌 Turnir nomi: <b>${tournamentName}</b>\n🔑 Admin paroli: <code>${adminCode}</code>\n\nJonli havola: <a href="${window.location.origin}/#admin">${window.location.origin}/#admin</a>`;
+  const now = new Date();
+  const dateStr = `${String(now.getDate()).padStart(2, '0')}.${String(now.getMonth() + 1).padStart(2, '0')}.${now.getFullYear()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  const text = `🏆 <b>Yangi mini-futbol turniri hosil qilindi</b>\n\n📅 Sana: <b>${dateStr}</b>\n📌 Turnir nomi: <b>${tournamentName}</b>\n🔑 Admin paroli: <code>${adminCode}</code>\n\nJonli havola: <a href="${window.location.origin}/#admin">${window.location.origin}/#admin</a>`;
   try {
     const url = `https://api.telegram.org/bot${token}/sendMessage`;
     const res = await fetch(url, {
