@@ -179,7 +179,7 @@ export default function BracketView({ matches, teams, isAdmin, onMatchClick }) {
             {t1Wins && ' 🏆'}
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            {match.penalty1 != null && <span className="pen-badge">({match.penalty1})</span>}
+            {match.penalty1 != null && match.is_completed && <span className="pen-badge">({match.penalty1})</span>}
             <span className={`score${t1Wins ? ' winner-score' : ''}`}>
               {match.score1 != null ? match.score1 : '–'}
             </span>
@@ -202,7 +202,7 @@ export default function BracketView({ matches, teams, isAdmin, onMatchClick }) {
             {t2Wins && ' 🏆'}
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            {match.penalty2 != null && <span className="pen-badge">({match.penalty2})</span>}
+            {match.penalty2 != null && match.is_completed && <span className="pen-badge">({match.penalty2})</span>}
             <span className={`score${t2Wins ? ' winner-score' : ''}`}>
               {status === 'bye' ? '' : (match.score2 != null ? match.score2 : '–')}
             </span>

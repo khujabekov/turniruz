@@ -77,14 +77,18 @@ export default function App() {
     const ch = supabase
       .channel(`matches-${activeId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'matches', filter: `tournament_id=eq.${activeId}` },
-        async () => {
+        async (payload) => {
           setMatches(await fetchMatches(activeId));
           const { data: t } = await supabase.from('tournaments').select('*').eq('id', activeId).single();
           if (t) setActiveTour(t);
+          // Sync open modal state with updated database values
+          if (payload.new && selMatch && payload.new.id === selMatch.id) {
+            setSelMatch(payload.new);
+          }
         })
       .subscribe();
     return () => supabase.removeChannel(ch);
-  }, [activeId]);
+  }, [activeId, selMatch]);
 
   // Sync auth status when activeId or passcodes change
   useEffect(() => {
@@ -155,9 +159,13 @@ export default function App() {
         payload.oldWinnerId,
         payload.isCompleted
       );
-      setSelMatch(null);
+      // Only close the modal if match was finalized (isCompleted) or cleared (score1 === null)
+      if (payload.isCompleted || payload.score1 === null) {
+        setSelMatch(null);
+      }
     } catch (err) { alert('Xatolik: ' + err.message); }
   };
+
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
