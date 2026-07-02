@@ -1,46 +1,8 @@
 /**
  * Dynamic Bracket Generator logic for Single-Elimination (Play-off) Tournaments.
+ * Minimizes byes in early rounds. Ensures any team that gets a bye in a round
+ * is guaranteed to play in the immediate next round.
  */
-
-/**
- * Calculates the next power of 2, the number of byes, and the total rounds.
- * @param {number} N - Number of teams
- * @returns {{ M: number, byes: number, roundsCount: number }}
- */
-export function calculateBracketSize(N) {
-  if (N < 2) return { M: 2, byes: Math.max(0, 2 - N), roundsCount: 1 };
-  
-  let M = 2;
-  let roundsCount = 1;
-  while (M < N) {
-    M *= 2;
-    roundsCount++;
-  }
-  return { M, byes: M - N, roundsCount };
-}
-
-/**
- * Distributes B items evenly in L slots.
- * Useful for spreading byes evenly across the bracket.
- * @param {number} L - Total slots (Round 1 matches)
- * @param {number} B - Number of byes to distribute
- * @returns {Set<number>} Set of slot indices that should contain a bye
- */
-export function getDistributedIndices(L, B) {
-  const indices = new Set();
-  if (B <= 0) return indices;
-  if (B >= L) {
-    for (let i = 0; i < L; i++) indices.add(i);
-    return indices;
-  }
-  
-  // Use a floating point step to distribute byes evenly
-  const step = L / B;
-  for (let i = 0; i < B; i++) {
-    indices.add(Math.floor(i * step));
-  }
-  return indices;
-}
 
 /**
  * Generates all matches for a tournament.
@@ -51,83 +13,77 @@ export function getDistributedIndices(L, B) {
 export function generateMatchesForTournament(tournamentId, teams) {
   const N = teams.length;
   if (N < 2) throw new Error("Turnir yaratish uchun kamida 2 ta jamoa kerak.");
+
+  const allMatches = [];
   
-  const { M, byes, roundsCount } = calculateBracketSize(N);
-  const matchesByRound = [];
-  
-  // 1. Create match shells with pre-generated UUIDs for all rounds
-  for (let r = 1; r <= roundsCount; r++) {
-    const matchesInRound = M / Math.pow(2, r);
+  // currentSlots stores the items in the current round.
+  // Each element is either:
+  // - { type: 'team', team: teamObj }
+  // - { type: 'match_winner', matchId: string }
+  let currentSlots = teams.map(t => ({ type: 'team', team: t }));
+  let roundNumber = 1;
+
+  while (currentSlots.length > 1) {
     const roundMatches = [];
-    
-    for (let m = 0; m < matchesInRound; m++) {
-      roundMatches.push({
-        id: crypto.randomUUID(),
+    const nextSlots = [];
+
+    // Number of matches in this round is floor(slots.length / 2)
+    const matchCount = Math.floor(currentSlots.length / 2);
+
+    for (let m = 0; m < matchCount; m++) {
+      const slot1 = currentSlots[2 * m];
+      const slot2 = currentSlots[2 * m + 1];
+      const matchId = crypto.randomUUID();
+
+      const match = {
+        id: matchId,
         tournament_id: tournamentId,
-        round_number: r,
+        round_number: roundNumber,
         match_order: m + 1,
-        team1_id: null,
-        team2_id: null,
+        team1_id: slot1.type === 'team' ? slot1.team.id : null,
+        team2_id: slot2.type === 'team' ? slot2.team.id : null,
         score1: null,
         score2: null,
         penalty1: null,
         penalty2: null,
         winner_id: null,
-        next_match_id: null
-      });
-    }
-    matchesByRound.push(roundMatches);
-  }
-  
-  // 2. Link matches between rounds via next_match_id
-  for (let r = 0; r < roundsCount - 1; r++) {
-    const currentRound = matchesByRound[r];
-    const nextRound = matchesByRound[r + 1];
-    
-    for (let m = 0; m < currentRound.length; m++) {
-      const nextMatchIndex = Math.floor(m / 2);
-      currentRound[m].next_match_id = nextRound[nextMatchIndex].id;
-    }
-  }
-  
-  // 3. Populate Round 1 matches and handle byes
-  const round1 = matchesByRound[0];
-  const L = M / 2; // Number of matches in Round 1
-  const byeMatchIndices = getDistributedIndices(L, byes);
-  
-  let teamIdx = 0;
-  for (let m = 0; m < L; m++) {
-    const match = round1[m];
-    const isByeMatch = byeMatchIndices.has(m);
-    
-    if (isByeMatch) {
-      // Bye match: only team1 is set, team2 is null (a bye)
-      const team = teams[teamIdx++];
-      match.team1_id = team.id;
-      match.team2_id = null;
-      match.winner_id = team.id; // Automatically wins!
-      
-      // Auto-advance this winner to the appropriate slot in Round 2 match
-      const nextMatchIndex = Math.floor(m / 2);
-      const nextMatch = matchesByRound[1][nextMatchIndex];
-      
-      if (m % 2 === 0) {
-        nextMatch.team1_id = team.id;
-      } else {
-        nextMatch.team2_id = team.id;
+        next_match_id: null,
+        next_match_slot: null
+      };
+
+      // Link previous matches to this match
+      if (slot1.type === 'match_winner') {
+        const prevMatch = allMatches.find(x => x.id === slot1.matchId);
+        if (prevMatch) {
+          prevMatch.next_match_id = matchId;
+          prevMatch.next_match_slot = 1;
+        }
       }
-    } else {
-      // Regular match: 2 teams play
-      match.team1_id = teams[teamIdx++].id;
-      match.team2_id = teams[teamIdx++].id;
+      if (slot2.type === 'match_winner') {
+        const prevMatch = allMatches.find(x => x.id === slot2.matchId);
+        if (prevMatch) {
+          prevMatch.next_match_id = matchId;
+          prevMatch.next_match_slot = 2;
+        }
+      }
+
+      roundMatches.push(match);
+      nextSlots.push({ type: 'match_winner', matchId: matchId });
     }
+
+    // If the number of slots in the current round is odd, the last slot gets a bye.
+    if (currentSlots.length % 2 !== 0) {
+      const byeSlot = currentSlots[currentSlots.length - 1];
+      // Put the bye slot at the FRONT of the next round's slots list.
+      // This guarantees that the bye team/slot will play in the next round,
+      // as requested by the user.
+      nextSlots.unshift(byeSlot);
+    }
+
+    allMatches.push(...roundMatches);
+    currentSlots = nextSlots;
+    roundNumber++;
   }
-  
-  // 4. Flatten the matches nested array into a single list
-  const flatMatches = [];
-  for (const roundMatches of matchesByRound) {
-    flatMatches.push(...roundMatches);
-  }
-  
-  return flatMatches;
+
+  return allMatches;
 }

@@ -213,14 +213,20 @@ async function propagateWinner(match, winnerId, oldWinnerId) {
 
   if (error || !nextMatch) return;
 
-  const isTeam1Slot = match.match_order % 2 !== 0;
-
   // Set up the update data
   const updatePayload = {};
-  if (isTeam1Slot) {
+  if (match.next_match_slot === 1) {
     updatePayload.team1_id = winnerId;
-  } else {
+  } else if (match.next_match_slot === 2) {
     updatePayload.team2_id = winnerId;
+  } else {
+    // Fallback to older binary tree logic
+    const isTeam1Slot = match.match_order % 2 !== 0;
+    if (isTeam1Slot) {
+      updatePayload.team1_id = winnerId;
+    } else {
+      updatePayload.team2_id = winnerId;
+    }
   }
 
   // Update next match's team slot
