@@ -217,8 +217,10 @@ async function propagateWinner(match, winnerId, oldWinnerId) {
 
   if (error || !nextMatch) return;
 
-  // Determine slot: odd match_order → team1, even → team2
-  const isTeam1Slot = match.match_order % 2 !== 0;
+  // Determine slot: use next_match_slot (1 for team1_id, 2 for team2_id) if set, otherwise fallback to match_order
+  const isTeam1Slot = match.next_match_slot !== undefined && match.next_match_slot !== null
+    ? match.next_match_slot === 1
+    : match.match_order % 2 !== 0;
   const updatePayload = {};
   if (isTeam1Slot) {
     updatePayload.team1_id = winnerId;

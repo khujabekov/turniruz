@@ -64,13 +64,85 @@ export function generateMatchesForTournament(tournamentId, teams) {
     matchesByRound.push(roundMatches);
   }
 
-  // 2. Raundlar orasini bog'lash (next_match_id)
+  // 2. Raundlar orasini bog'lash (next_match_id va next_match_slot)
+  let byeMatchIdx = (N % 2 !== 0) ? (matchesByRound[0].length - 1) : -1;
   for (let r = 0; r < roundsCount - 1; r++) {
     const curr = matchesByRound[r];
     const next = matchesByRound[r + 1];
-    for (let m = 0; m < curr.length; m++) {
-      curr[m].next_match_id = next[Math.floor(m / 2)].id;
+    const M = curr.length;
+    const L = next.length;
+
+    let nextByeMatchIdx = -1;
+
+    if (M % 2 === 0) {
+      // Agar juft o'yinlar bo'lsa, oddiy tartibda bog'laymiz
+      for (let m = 0; m < M; m++) {
+        const nextIdx = Math.floor(m / 2);
+        curr[m].next_match_id = next[nextIdx].id;
+        curr[m].next_match_slot = (m % 2 === 0) ? 1 : 2;
+      }
+      nextByeMatchIdx = -1;
+    } else {
+      // Agar toq o'yinlar bo'lsa, bye takrorlanishini oldini olish uchun
+      // bye o'yinni boshqa o'yin bilan bog'laymiz, va boshqa o'yinni keyingi roundda bye qilamiz.
+      const Br = byeMatchIdx;
+
+      if (Br === -1) {
+        // Agar joriy roundda bye bo'lmasa, oxirgisini keyingi roundda bye qilamiz
+        for (let m = 0; m < M - 1; m++) {
+          const nextIdx = Math.floor(m / 2);
+          curr[m].next_match_id = next[nextIdx].id;
+          curr[m].next_match_slot = (m % 2 === 0) ? 1 : 2;
+        }
+        curr[M - 1].next_match_id = next[L - 1].id;
+        curr[M - 1].next_match_slot = 1;
+        nextByeMatchIdx = L - 1;
+      } else {
+        // Joriy roundda Br indeksli o'yin bye o'yin.
+        // Uni Br bo'lmagan biror P o'yin bilan juftlaymiz.
+        // Va Br ham, P ham bo'lmagan biror U o'yinni keyingi roundga yolg'iz (unpaired) yuboramiz.
+        const U = (Br === 0) ? 1 : 0;
+        let P = -1;
+        for (let i = 0; i < M; i++) {
+          if (i !== Br && i !== U) {
+            P = i;
+            break;
+          }
+        }
+
+        // Qolgan elementlarni yig'amiz
+        const remaining = [];
+        for (let i = 0; i < M; i++) {
+          if (i !== Br && i !== P && i !== U) {
+            remaining.push(i);
+          }
+        }
+
+        // Br va P juftligini next[0] ga bog'laymiz
+        curr[Br].next_match_id = next[0].id;
+        curr[Br].next_match_slot = 1;
+        curr[P].next_match_id = next[0].id;
+        curr[P].next_match_slot = 2;
+
+        // Qolgan juftliklarni next[1], next[2], ... larga bog'laymiz
+        for (let i = 0; i < remaining.length; i += 2) {
+          const nextIdx = 1 + Math.floor(i / 2);
+          curr[remaining[i]].next_match_id = next[nextIdx].id;
+          curr[remaining[i]].next_match_slot = 1;
+          if (i + 1 < remaining.length) {
+            curr[remaining[i + 1]].next_match_id = next[nextIdx].id;
+            curr[remaining[i + 1]].next_match_slot = 2;
+          }
+        }
+
+        // Yolg'iz qolgan U o'yinini next[L - 1] ga bog'laymiz (bu keyingi rounddagi bye o'yin bo'ladi)
+        curr[U].next_match_id = next[L - 1].id;
+        curr[U].next_match_slot = 1;
+        nextByeMatchIdx = L - 1;
+      }
     }
+
+    byeMatchIdx = nextByeMatchIdx;
   }
 
   // 3. 1-raundga jamoalarni joylashtirish
@@ -91,8 +163,7 @@ export function generateMatchesForTournament(tournamentId, teams) {
 
   // 4. Bye-larni kaskad ravishda keyingi raundlarga o'tkazish
   //    Agar raund R da bye g'olibi bo'lsa, uni raund R+1 dagi matchga qo'yamiz.
-  //    Agar R+1 dagi matchga faqat 1 ta feeder kelsa (oxirgi match, juft yo'q),
-  //    u ham bye bo'ladi → yana keyingi raundga o'tkazamiz.
+  //    Agar R+1 dagi matchga faqat 1 ta feeder kelsa, u ham bye bo'ladi → yana keyingi raundga o'tkazamiz.
   for (let r = 0; r < roundsCount - 1; r++) {
     const curr = matchesByRound[r];
     const next = matchesByRound[r + 1];
@@ -100,11 +171,13 @@ export function generateMatchesForTournament(tournamentId, teams) {
     // G'oliblarni keyingi raundga o'tkazish
     for (let m = 0; m < curr.length; m++) {
       if (curr[m].winner_id) {
-        const nextMatch = next[Math.floor(m / 2)];
-        if (m % 2 === 0) {
-          nextMatch.team1_id = curr[m].winner_id;
-        } else {
-          nextMatch.team2_id = curr[m].winner_id;
+        const nextMatch = next.find(nm => nm.id === curr[m].next_match_id);
+        if (nextMatch) {
+          if (curr[m].next_match_slot === 1) {
+            nextMatch.team1_id = curr[m].winner_id;
+          } else {
+            nextMatch.team2_id = curr[m].winner_id;
+          }
         }
       }
     }
@@ -112,14 +185,15 @@ export function generateMatchesForTournament(tournamentId, teams) {
     // Keyingi raunddagi matchlarni tekshirish: structural bye bor-yo'qligi
     for (let j = 0; j < next.length; j++) {
       const nm = next[j];
-      const feeder2Idx = 2 * j + 1; // team2 ni yuboradigan match indeksi
-      const hasFeeder2 = feeder2Idx < curr.length;
+      
+      // Count how many matches in curr feed into this next match
+      const feeders = curr.filter(cm => cm.next_match_id === nm.id);
 
       // Agar faqat 1 ta feeder bo'lsa -> structural bye
-      if (!hasFeeder2) {
+      if (feeders.length === 1) {
         nm.match_status = 'bye';
-        if (nm.team1_id) {
-          nm.winner_id = nm.team1_id;
+        if (nm.team1_id || nm.team2_id) {
+          nm.winner_id = nm.team1_id || nm.team2_id;
           nm.is_completed = true;
           nm.match_status = 'completed';
         }
