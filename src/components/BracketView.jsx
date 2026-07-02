@@ -152,6 +152,8 @@ export default function BracketView({ matches, teams, isAdmin, onMatchClick }) {
 
     // Show penalties only in penalties stage or if completed
     const showPenalties = match.match_status === 'penalties' || match.match_status === 'completed';
+    const p1Val = match.penalty1 != null ? match.penalty1 : (showPenalties ? 0 : null);
+    const p2Val = match.penalty2 != null ? match.penalty2 : (showPenalties ? 0 : null);
 
     return (
       <div
@@ -185,7 +187,7 @@ export default function BracketView({ matches, teams, isAdmin, onMatchClick }) {
             {t1Wins && ' 🏆'}
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            {match.penalty1 != null && showPenalties && <span className="pen-badge">({match.penalty1})</span>}
+            {p1Val != null && showPenalties && <span className="pen-badge">({p1Val})</span>}
             <span className={`score${t1Wins ? ' winner-score' : ''}`}>
               {match.score1 != null ? match.score1 : '–'}
             </span>
@@ -208,7 +210,7 @@ export default function BracketView({ matches, teams, isAdmin, onMatchClick }) {
             {t2Wins && ' 🏆'}
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            {match.penalty2 != null && showPenalties && <span className="pen-badge">({match.penalty2})</span>}
+            {p2Val != null && showPenalties && <span className="pen-badge">({p2Val})</span>}
             <span className={`score${t2Wins ? ' winner-score' : ''}`}>
               {status === 'bye' ? '' : (match.score2 != null ? match.score2 : '–')}
             </span>
