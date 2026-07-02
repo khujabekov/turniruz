@@ -161,7 +161,7 @@ export async function createNewTournament(name, teamNames) {
  * Updates a match score and propagates the winner to the next round.
  * Handles cascading resets/corrections recursively.
  */
-export async function updateMatchResult(matchId, score1, score2, penalty1, penalty2, winnerId, oldWinnerId, isCompleted = false) {
+export async function updateMatchResult(matchId, score1, score2, penalty1, penalty2, winnerId, oldWinnerId, isCompleted = false, matchStatus = 'live') {
   // 1. Update the current match
   const { data: updatedMatch, error: updateError } = await supabase
     .from('matches')
@@ -171,7 +171,8 @@ export async function updateMatchResult(matchId, score1, score2, penalty1, penal
       penalty1: penalty1 !== '' && penalty1 !== null ? parseInt(penalty1) : null,
       penalty2: penalty2 !== '' && penalty2 !== null ? parseInt(penalty2) : null,
       winner_id: winnerId || null,
-      is_completed: isCompleted
+      is_completed: isCompleted,
+      match_status: isCompleted ? 'completed' : matchStatus
     })
     .eq('id', matchId)
     .select()
@@ -180,8 +181,6 @@ export async function updateMatchResult(matchId, score1, score2, penalty1, penal
   if (updateError) throw updateError;
 
   // 2. Propagate winner or clear next rounds if winner changed or match is not fully completed yet
-  // If match is completed, propagate the actual winner.
-  // If match is NOT completed, we must ensure next match slot is null (reset if it had a team previously).
   const targetWinnerId = isCompleted ? winnerId : null;
   await propagateWinner(updatedMatch, targetWinnerId, oldWinnerId);
 

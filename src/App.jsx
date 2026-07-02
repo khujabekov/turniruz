@@ -157,7 +157,8 @@ export default function App() {
         payload.penalty2,
         payload.winnerId,
         payload.oldWinnerId,
-        payload.isCompleted
+        payload.isCompleted,
+        payload.matchStatus
       );
       // Only close the modal if match was finalized (isCompleted) or cleared (score1 === null)
       if (payload.isCompleted || payload.score1 === null) {

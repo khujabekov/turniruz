@@ -8,7 +8,9 @@ export default function MatchModal({ isOpen, onClose, match, team1, team2, onSav
   const [winnerId, setWinnerId] = useState('');
   const [error, setError] = useState('');
 
-  // Initialize values when match changes
+  // Current stage: 'waiting', 'live', 'normal_ended', 'penalties', 'completed'
+  const currentStatus = match?.match_status || 'waiting';
+
   useEffect(() => {
     if (match) {
       setS1(match.score1 != null ? match.score1 : 0);
@@ -20,7 +22,7 @@ export default function MatchModal({ isOpen, onClose, match, team1, team2, onSav
     }
   }, [match]);
 
-  // Determine winner dynamically on state changes
+  // Determine winner dynamically on score or penalty changes
   useEffect(() => {
     const isDraw = s1 === s2;
     if (!isDraw) {
@@ -37,8 +39,8 @@ export default function MatchModal({ isOpen, onClose, match, team1, team2, onSav
 
   const isDraw = s1 === s2;
 
-  // Helper to update score and instantly save to database (Live status)
-  const triggerAutoSave = (newS1, newS2, newP1, newP2) => {
+  // Helper to trigger database updates with current stage
+  const triggerAutoSave = (newS1, newS2, newP1, newP2, newStatus = 'live') => {
     let currentWinner = '';
     const draw = newS1 === newS2;
     if (!draw) {
@@ -56,46 +58,63 @@ export default function MatchModal({ isOpen, onClose, match, team1, team2, onSav
       penalty2: draw ? newP2 : null,
       winnerId: currentWinner || null,
       oldWinnerId: match.winner_id,
-      isCompleted: false // Keep in Live mode while editing
+      isCompleted: false, // Remains false until explicitly finalized via complete button
+      matchStatus: newStatus
     });
   };
 
-  // Adjust score 1
+  // Up/Down adjusters
   const changeScore1 = (val) => {
     const nextVal = Math.max(0, s1 + val);
     setS1(nextVal);
-    triggerAutoSave(nextVal, s2, p1, p2);
+    triggerAutoSave(nextVal, s2, p1, p2, 'live');
   };
 
-  // Adjust score 2
   const changeScore2 = (val) => {
     const nextVal = Math.max(0, s2 + val);
     setS2(nextVal);
-    triggerAutoSave(s1, nextVal, p1, p2);
+    triggerAutoSave(s1, nextVal, p1, p2, 'live');
   };
 
-  // Adjust penalty 1
   const changePenalty1 = (val) => {
     const nextVal = Math.max(0, p1 + val);
     setP1(nextVal);
-    triggerAutoSave(s1, s2, nextVal, p2);
+    triggerAutoSave(s1, s2, nextVal, p2, 'penalties');
   };
 
-  // Adjust penalty 2
   const changePenalty2 = (val) => {
     const nextVal = Math.max(0, p2 + val);
     setP2(nextVal);
-    triggerAutoSave(s1, s2, p1, nextVal);
+    triggerAutoSave(s1, s2, p1, nextVal, 'penalties');
   };
 
-  // Finish match officially (mark as completed and advance winner)
-  const handleFinishMatch = () => {
+  // Phase transition actions
+  const handleFinishNormalTime = () => {
+    if (isDraw) {
+      // Transition to penalty shootout
+      triggerAutoSave(s1, s2, p1, p2, 'penalties');
+    } else {
+      // Direct transition to end of normal time
+      triggerAutoSave(s1, s2, null, null, 'normal_ended');
+    }
+  };
+
+  const handleFinishPenalties = () => {
+    if (p1 === p2) {
+      setError("Penaltilar seriyasida durang bo'lishi mumkin emas. G'olib aniqlanishi shart.");
+      return;
+    }
+    setError('');
+    triggerAutoSave(s1, s2, p1, p2, 'normal_ended');
+  };
+
+  const handleFinalizeMatch = () => {
     if (isDraw && p1 === p2) {
-      setError("Durang holatda penaltilar seriyasi orqali g'olib aniqlanishi shart.");
+      setError("O'yinni yakunlash uchun penaltilar g'olibi aniqlanishi kerak.");
       return;
     }
     if (!winnerId) {
-      setError("G'olib aniqlanmadi. O'yinni yakunlab bo'lmaydi.");
+      setError("G'olib aniqlanmadi.");
       return;
     }
 
@@ -107,7 +126,8 @@ export default function MatchModal({ isOpen, onClose, match, team1, team2, onSav
       penalty2: isDraw ? p2 : null,
       winnerId,
       oldWinnerId: match.winner_id,
-      isCompleted: true // officially finish the match
+      isCompleted: true, // Officially closes and advances
+      matchStatus: 'completed'
     });
   };
 
@@ -120,11 +140,21 @@ export default function MatchModal({ isOpen, onClose, match, team1, team2, onSav
       penalty2: null,
       winnerId: null,
       oldWinnerId: match.winner_id,
-      isCompleted: false
+      isCompleted: false,
+      matchStatus: 'waiting'
     });
   };
 
   const winnerName = winnerId === team1?.id ? team1?.name : (winnerId === team2?.id ? team2?.name : null);
+
+  // Status stage titles
+  const getStageHeader = () => {
+    if (currentStatus === 'completed') return '🏆 O\'yin Yakunlandi';
+    if (currentStatus === 'penalties') return '🎯 Penaltilar Seriyasi';
+    if (currentStatus === 'normal_ended') return '⏱ Asosiy Vaqt Tugadi';
+    if (currentStatus === 'live') return '⚽ Asosiy Vaqt Ketmoqda';
+    return '⏳ Boshlanmagan';
+  };
 
   return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
@@ -139,123 +169,152 @@ export default function MatchModal({ isOpen, onClose, match, team1, team2, onSav
         {/* Body */}
         <div className="modal-body">
           {error && <div className="alert-error" style={{ marginBottom: 12 }}>{error}</div>}
-          
-          {match.is_completed ? (
-            <div className="alert-success" style={{ fontSize: 12, padding: '8px 12px', textAlign: 'center', marginBottom: 12 }}>
-              ✓ O'yin yakunlangan (Natija muzlatilgan)
-            </div>
-          ) : (
-            <div style={{ fontSize: 11, color: 'var(--c-muted)', textAlign: 'center', marginBottom: 12, background: 'rgba(59, 130, 246, 0.1)', padding: '6px 12px', borderRadius: 8, border: '1px solid rgba(59, 130, 246, 0.2)' }}>
-              ⚡ Har bir o'zgarish avtomatik saqlanib, realtime uzatiladi.
-            </div>
-          )}
 
-          {/* Team Rows with Counter Controls */}
+          {/* Current Status Header Banner */}
+          <div style={{
+            textAlign: 'center',
+            fontSize: 13,
+            fontWeight: 800,
+            padding: '8px 16px',
+            borderRadius: 8,
+            marginBottom: 16,
+            background: currentStatus === 'completed' ? 'rgba(16, 185, 129, 0.15)' :
+                        currentStatus === 'penalties' ? 'rgba(245, 158, 11, 0.15)' :
+                        currentStatus === 'normal_ended' ? 'rgba(148, 163, 184, 0.15)' : 'rgba(59, 130, 246, 0.15)',
+            border: `1px solid ${
+              currentStatus === 'completed' ? 'var(--c-green)' :
+              currentStatus === 'penalties' ? 'var(--c-gold)' :
+              currentStatus === 'normal_ended' ? 'var(--c-muted)' : 'var(--c-blue)'
+            }`,
+            color: currentStatus === 'completed' ? 'var(--c-green)' :
+                   currentStatus === 'penalties' ? 'var(--c-gold)' : '#fff'
+          }}>
+            {getStageHeader()}
+          </div>
+
+          {/* Team Rows */}
           {[
             { team: team1, score: s1, changeScore: changeScore1, teamId: match.team1_id },
             { team: team2, score: s2, changeScore: changeScore2, teamId: match.team2_id }
           ].map(({ team, score, changeScore, teamId }, idx) => {
             const isWinner = winnerId === teamId;
             const hasTeams = team1 && team2;
+            const scoreDisabled = !hasTeams || currentStatus === 'completed' || currentStatus === 'normal_ended' || currentStatus === 'penalties';
             return (
               <div key={idx} className="modal-team-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0' }}>
                 <div className="modal-team-info" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div className={`avatar${isWinner ? ' winner-av' : ''}`} style={{ width: 32, height: 32, fontSize: 10 }}>
+                  <div className={`avatar${isWinner && currentStatus === 'completed' ? ' winner-av' : ''}`} style={{ width: 32, height: 32, fontSize: 10 }}>
                     {team ? team.name.substring(0, 2).toUpperCase() : '?'}
                   </div>
-                  <span className={`modal-team-name${isWinner ? ' winner' : ''}`} style={{ fontWeight: 700, fontSize: 14 }}>
+                  <span className={`modal-team-name${isWinner && currentStatus === 'completed' ? ' winner' : ''}`} style={{ fontWeight: 700, fontSize: 14 }}>
                     {team ? team.name : 'Kutilmoqda'}
                   </span>
                 </div>
 
-                {/* Score Controls */}
+                {/* Score controls */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <button 
                     type="button" 
                     className="counter-btn" 
                     onClick={() => changeScore(-1)}
-                    disabled={!hasTeams || match.is_completed || score <= 0}
-                  >
-                    －
-                  </button>
+                    disabled={scoreDisabled || score <= 0}
+                  >－</button>
                   <span className="score-counter-val">{score}</span>
                   <button 
                     type="button" 
                     className="counter-btn" 
                     onClick={() => changeScore(1)}
-                    disabled={!hasTeams || match.is_completed}
-                  >
-                    ＋
-                  </button>
+                    disabled={scoreDisabled}
+                  >＋</button>
                 </div>
               </div>
             );
           })}
 
-          {/* Penalty section (only if scores are equal and teams exist) */}
-          {isDraw && team1 && team2 && (
+          {/* Penalties Section */}
+          {((isDraw && currentStatus === 'penalties') || currentStatus === 'completed' || currentStatus === 'normal_ended') && isDraw && team1 && team2 && (
             <div className="penalty-section" style={{ marginTop: 16, paddingTop: 16, borderTop: '1px dashed var(--c-border)' }}>
               <div className="penalty-title" style={{ fontSize: 12, fontWeight: 800, color: 'var(--c-gold)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10, textAlign: 'center' }}>
-                Penaltilar Seriyasi
+                🎯 Penaltilar Seriyasi
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-around', gap: 16 }}>
                 {[
                   { team: team1, val: p1, change: changePenalty1 },
                   { team: team2, val: p2, change: changePenalty2 }
-                ].map(({ team, val, change }, i) => (
-                  <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-                    <label style={{ fontSize: 11, color: 'var(--c-muted)', maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {team.name}
-                    </label>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <button 
-                        type="button" 
-                        className="counter-btn counter-btn-sm" 
-                        onClick={() => change(-1)}
-                        disabled={match.is_completed || val <= 0}
-                      >
-                        －
-                      </button>
-                      <span className="penalty-counter-val">{val}</span>
-                      <button 
-                        type="button" 
-                        className="counter-btn counter-btn-sm" 
-                        onClick={() => change(1)}
-                        disabled={match.is_completed}
-                      >
-                        ＋
-                      </button>
+                ].map(({ team, val, change }, i) => {
+                  const penaltyDisabled = currentStatus === 'completed' || currentStatus === 'normal_ended';
+                  return (
+                    <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                      <label style={{ fontSize: 11, color: 'var(--c-muted)', maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {team.name}
+                      </label>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <button 
+                          type="button" 
+                          className="counter-btn counter-btn-sm" 
+                          onClick={() => change(-1)}
+                          disabled={penaltyDisabled || val <= 0}
+                        >－</button>
+                        <span className="penalty-counter-val">{val}</span>
+                        <button 
+                          type="button" 
+                          className="counter-btn counter-btn-sm" 
+                          onClick={() => change(1)}
+                          disabled={penaltyDisabled}
+                        >＋</button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
 
-          {/* Winner indicator */}
-          {winnerName && (
+          {/* Winner banner (only visible when completed or at end state) */}
+          {winnerName && currentStatus === 'completed' && (
             <div className="alert-success" style={{ textAlign: 'center', fontWeight: 800, marginTop: 16, fontSize: 13 }}>
-              🏆 Yetakchi/G'olib: {winnerName}
+              🏆 G'olib: {winnerName}
             </div>
           )}
 
           {/* Action buttons */}
-          <div className="modal-actions" style={{ gap: 10, marginTop: 20, flexWrap: 'wrap' }}>
+          <div className="modal-actions" style={{ gap: 10, marginTop: 24, flexWrap: 'wrap' }}>
             <button type="button" className="btn btn-ghost btn-sm"
               onClick={handleReset}
-              disabled={match.score1 == null && match.score2 == null && !match.is_completed}
+              disabled={match.score1 == null && match.score2 == null && currentStatus === 'waiting'}
             >Tozalash</button>
             <div style={{ flex: 1 }} />
             <button type="button" className="btn btn-ghost" onClick={onClose}>
-              {match.is_completed ? 'Yopish' : 'Bekor qilish'}
+              {currentStatus === 'completed' ? 'Yopish' : 'Bekor qilish'}
             </button>
-            
-            {!match.is_completed && (
+
+            {/* Stage button transitions */}
+            {currentStatus === 'live' && (
+              <button 
+                type="button" 
+                className="btn btn-secondary" 
+                onClick={handleFinishNormalTime}
+              >
+                ⏱ Asosiy Vaqtni Tugatish
+              </button>
+            )}
+
+            {currentStatus === 'penalties' && (
+              <button 
+                type="button" 
+                className="btn btn-gold" 
+                onClick={handleFinishPenalties}
+                style={{ background: 'var(--c-gold)', color: '#000', fontWeight: 800 }}
+              >
+                🎯 Penaltilarni Tugatish
+              </button>
+            )}
+
+            {currentStatus === 'normal_ended' && (
               <button 
                 type="button" 
                 className="btn btn-primary" 
-                disabled={!team1 || !team2} 
-                onClick={handleFinishMatch}
+                onClick={handleFinalizeMatch}
               >
                 🏁 O'yinni Yakunlash
               </button>
@@ -266,3 +325,4 @@ export default function MatchModal({ isOpen, onClose, match, team1, team2, onSav
     </div>
   );
 }
+

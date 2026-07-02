@@ -116,22 +116,21 @@ export default function BracketView({ matches, teams, isAdmin, onMatchClick }) {
     if (closestIndex !== activeRoundIndex) setActiveRoundIndex(closestIndex);
   };
 
-  // Match status: 'bye', 'completed', 'live', 'ready', 'waiting'
+  // Match status mapping
   const getMatchStatus = (match) => {
     const t1 = match.team1_id;
     const t2 = match.team2_id;
     const isBye = t1 && !t2 && match.round_number === 1;
     if (isBye) return 'bye';
-    if (match.is_completed) return 'completed';
-    if (t1 && t2 && (match.score1 !== null || match.score2 !== null)) return 'live';
-    if (t1 && t2) return 'ready';
-    return 'waiting';
+    return match.match_status || 'waiting';
   };
 
   const statusLabels = {
     bye: { text: 'Avtomatik O\'tish', color: 'var(--c-muted)', icon: '↪' },
-    completed: { text: 'Tugadi', color: 'var(--c-green)', icon: '✓' },
-    live: { text: 'Bo\'lyapti (Live)', color: '#3b82f6', icon: '⚽' },
+    completed: { text: 'Yakunlandi', color: 'var(--c-green)', icon: '✓' },
+    penalties: { text: 'Penaltilar Seriyasi', color: 'var(--c-gold)', icon: '🎯' },
+    normal_ended: { text: 'Asosiy Vaqt Tugadi', color: 'var(--c-muted)', icon: '⏱' },
+    live: { text: 'Asosiy Vaqt', color: '#3b82f6', icon: '⚽' },
     ready: { text: 'Kutilmoqda (Tayyor)', color: '#f59e0b', icon: '⚡' },
     waiting: { text: 'Kutilmoqda', color: 'var(--c-muted)', icon: '⏳' }
   };
@@ -140,12 +139,19 @@ export default function BracketView({ matches, teams, isAdmin, onMatchClick }) {
     const t1 = match.team1_id ? teamsMap.get(match.team1_id) : null;
     const t2 = match.team2_id ? teamsMap.get(match.team2_id) : null;
     const status = getMatchStatus(match);
-    const statusInfo = statusLabels[status];
-    const t1Wins = match.winner_id && match.winner_id === match.team1_id;
-    const t2Wins = match.winner_id && match.winner_id === match.team2_id;
+    const statusInfo = statusLabels[status] || statusLabels.waiting;
+    
+    // Winner check only if match is completed
+    const isCompleted = match.match_status === 'completed';
+    const t1Wins = isCompleted && match.winner_id && match.winner_id === match.team1_id;
+    const t2Wins = isCompleted && match.winner_id && match.winner_id === match.team2_id;
+    
     const h1 = hoveredTeamId && match.team1_id === hoveredTeamId;
     const h2 = hoveredTeamId && match.team2_id === hoveredTeamId;
     const clickable = isAdmin && t1 && t2 && status !== 'bye';
+
+    // Show penalties only in penalties stage or if completed
+    const showPenalties = match.match_status === 'penalties' || match.match_status === 'completed';
 
     return (
       <div
@@ -179,7 +185,7 @@ export default function BracketView({ matches, teams, isAdmin, onMatchClick }) {
             {t1Wins && ' 🏆'}
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            {match.penalty1 != null && match.is_completed && <span className="pen-badge">({match.penalty1})</span>}
+            {match.penalty1 != null && showPenalties && <span className="pen-badge">({match.penalty1})</span>}
             <span className={`score${t1Wins ? ' winner-score' : ''}`}>
               {match.score1 != null ? match.score1 : '–'}
             </span>
@@ -202,7 +208,7 @@ export default function BracketView({ matches, teams, isAdmin, onMatchClick }) {
             {t2Wins && ' 🏆'}
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            {match.penalty2 != null && match.is_completed && <span className="pen-badge">({match.penalty2})</span>}
+            {match.penalty2 != null && showPenalties && <span className="pen-badge">({match.penalty2})</span>}
             <span className={`score${t2Wins ? ' winner-score' : ''}`}>
               {status === 'bye' ? '' : (match.score2 != null ? match.score2 : '–')}
             </span>

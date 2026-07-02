@@ -1527,6 +1527,15 @@ input, textarea, select {
   box-shadow: 0 0 10px rgba(59, 130, 246, 0.15);
 }
 
+.match-card.status-penalties {
+  border-left: 3px solid var(--c-gold);
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.15);
+}
+
+.match-card.status-normal_ended {
+  border-left: 3px solid var(--c-muted);
+}
+
 .match-card.status-ready {
   border-left: 3px solid #f59e0b;
 }

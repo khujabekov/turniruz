@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS matches (
     next_match_id UUID REFERENCES matches(id) ON DELETE SET NULL,
     next_match_slot INTEGER, -- 1 for team1_id, 2 for team2_id
     is_completed BOOLEAN DEFAULT FALSE,
+    match_status VARCHAR(50) DEFAULT 'waiting', -- 'waiting', 'live', 'normal_ended', 'penalties', 'completed'
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
