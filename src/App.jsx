@@ -1,6 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from './utils/supabaseClient';
-import { fetchTournaments, fetchTeams, fetchMatches, updateMatchResult } from './utils/supabaseService';
+import {
+  fetchTournaments,
+  fetchTournamentById,
+  fetchTeams,
+  fetchMatches,
+  updateMatchResult,
+  fetchTournamentAdminCode,
+  subscribeToChanges,
+  getDbMode
+} from './utils/supabaseService';
 import BracketView from './components/BracketView';
 import AdminPanel from './components/AdminPanel';
 import MatchModal from './components/MatchModal';
@@ -9,6 +17,11 @@ import TeamRankings from './components/TeamRankings';
 
 export default function App() {
   const [isAdmin, setIsAdmin] = useState(window.location.hash === '#admin');
+  const [dbMode, setDbMode] = useState('local');
+
+  useEffect(() => {
+    getDbMode().then(mode => setDbMode(mode));
+  }, []);
   const [tournaments, setTournaments] = useState([]);
   const [activeId, setActiveId] = useState(null);
   const [activeTour, setActiveTour] = useState(null);
@@ -54,11 +67,8 @@ export default function App() {
 
   useEffect(() => {
     loadTours(true);
-    const ch = supabase
-      .channel('tours-global')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tournaments' }, () => loadTours(false))
-      .subscribe();
-    return () => supabase.removeChannel(ch);
+    const unsubscribe = subscribeToChanges(null, () => loadTours(false));
+    return () => unsubscribe();
   }, []);
 
   /* load active tournament details */
@@ -66,7 +76,7 @@ export default function App() {
     if (!id) { setActiveTour(null); setTeams([]); setMatches([]); return; }
     setLoading(true);
     try {
-      const { data: tour } = await supabase.from('tournaments').select('*').eq('id', id).single();
+      const tour = await fetchTournamentById(id);
       setActiveTour(tour);
       setTeams(await fetchTeams(id));
       setMatches(await fetchMatches(id));
@@ -77,16 +87,14 @@ export default function App() {
   useEffect(() => {
     loadDetails(activeId);
     if (!activeId) return;
-    const ch = supabase
-      .channel(`matches-${activeId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'matches', filter: `tournament_id=eq.${activeId}` },
-        async (payload) => {
-          setMatches(await fetchMatches(activeId));
-          const { data: t } = await supabase.from('tournaments').select('*').eq('id', activeId).single();
-          if (t) setActiveTour(t);
-        })
-      .subscribe();
-    return () => supabase.removeChannel(ch);
+    const unsubscribe = subscribeToChanges(activeId, async () => {
+      setMatches(await fetchMatches(activeId));
+      try {
+        const t = await fetchTournamentById(activeId);
+        if (t) setActiveTour(t);
+      } catch (e) { console.error(e); }
+    });
+    return () => unsubscribe();
   }, [activeId]);
 
   // Sync auth status when activeId or passcodes change
@@ -99,17 +107,12 @@ export default function App() {
     }
     const checkAuth = async () => {
       try {
-        const { data: tour } = await supabase
-          .from('tournaments')
-          .select('admin_code')
-          .eq('id', activeId)
-          .single();
-
-        if (!tour || !tour.admin_code) {
+        const adminCode = await fetchTournamentAdminCode(activeId);
+        if (!adminCode) {
           setIsAdminAuthorized(true);
         } else {
           const cachedCode = passcodes[activeId];
-          if (cachedCode === tour.admin_code) {
+          if (cachedCode === adminCode) {
             setIsAdminAuthorized(true);
           } else {
             setIsAdminAuthorized(false);
@@ -126,13 +129,8 @@ export default function App() {
     if (!activeId) return;
     setAuthError('');
     try {
-      const { data: tour } = await supabase
-        .from('tournaments')
-        .select('admin_code')
-        .eq('id', activeId)
-        .single();
-
-      if (tour && tour.admin_code === enteredPass.trim()) {
+      const adminCode = await fetchTournamentAdminCode(activeId);
+      if (adminCode && adminCode === enteredPass.trim()) {
         const updated = { ...passcodes, [activeId]: enteredPass.trim() };
         setPasscodes(updated);
         localStorage.setItem('tour_passcodes', JSON.stringify(updated));
@@ -170,10 +168,10 @@ export default function App() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
 
-      {/* ENV warning */}
-      {!isEnvOk && (
+      {/* DB offline notice */}
+      {dbMode === 'local' && (
         <div className="alert-warn" style={{ borderRadius: 0, border: 'none', borderBottom: '1px solid rgba(245,158,11,0.3)', textAlign: 'center', fontSize: 12, padding: '10px 16px' }}>
-          ⚠️ <strong>Diqqat!</strong> Supabase ma'lumotlari topilmadi. <code>.env</code> faylini to'ldiring.
+          ⚠️ <strong>Oflayn rejim:</strong> Supabase bilan aloqa o'rnatilmadi. Ma'lumotlar faqatgina ushbu brauzerda (LocalStorage) saqlanadi.
         </div>
       )}
 
@@ -187,18 +185,47 @@ export default function App() {
           </div>
         </div>
 
-        {/* Desktop navbar links - ONLY visible if user is currently in admin mode */}
-        {isAdmin && (
-          <nav className="desktop-nav" style={{ display: 'flex', alignItems: 'center' }}>
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={() => { window.location.hash = ''; setIsAdmin(false); }}
-              style={{ color: 'var(--c-rose)', fontWeight: 700, padding: '6px 12px', border: '1px solid rgba(244,63,94,0.2)' }}
-            >
-              🔒 Chiqish
-            </button>
-          </nav>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {/* DB Mode Indicator */}
+          <div 
+            style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: 6, 
+              padding: '4px 10px', 
+              borderRadius: '20px', 
+              fontSize: '11px', 
+              fontWeight: 700, 
+              background: dbMode === 'supabase' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)', 
+              border: `1px solid ${dbMode === 'supabase' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(245, 158, 11, 0.2)'}`,
+              color: dbMode === 'supabase' ? 'var(--c-green)' : 'var(--c-gold)'
+            }}
+            title={dbMode === 'supabase' ? "Supabase ma'lumotlar bazasiga ulangan" : "LocalStorage (Oflayn) rejimida ishlamoqda. Ma'lumotlar brauzerda saqlanadi."}
+          >
+            <span style={{ 
+              width: 6, 
+              height: 6, 
+              borderRadius: '50%', 
+              background: dbMode === 'supabase' ? 'var(--c-green)' : 'var(--c-gold)', 
+              display: 'inline-block',
+              animation: 'ping2 1.5s ease-in-out infinite'
+            }} />
+            {dbMode === 'supabase' ? 'Supabase' : 'Oflayn (Local)'}
+          </div>
+
+          {/* Desktop navbar links - ONLY visible if user is currently in admin mode */}
+          {isAdmin && (
+            <nav className="desktop-nav" style={{ display: 'flex', alignItems: 'center' }}>
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => { window.location.hash = ''; setIsAdmin(false); }}
+                style={{ color: 'var(--c-rose)', fontWeight: 700, padding: '6px 12px', border: '1px solid rgba(244,63,94,0.2)' }}
+              >
+                🔒 Chiqish
+              </button>
+            </nav>
+          )}
+        </div>
       </header>
 
       {/* Main Container */}

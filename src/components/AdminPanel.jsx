@@ -1,6 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { createNewTournament, fetchTournaments } from '../utils/supabaseService';
-import { supabase } from '../utils/supabaseClient';
+import {
+  createNewTournament,
+  fetchTournaments,
+  getTeamCount,
+  renameTournament,
+  deleteTournament,
+  fetchTournamentAdminCode,
+  subscribeToChanges
+} from '../utils/supabaseService';
 
 export default function AdminPanel({ onSelectTournament, activeTournamentId }) {
   const [tournaments, setTournaments] = useState([]);
@@ -20,12 +27,11 @@ export default function AdminPanel({ onSelectTournament, activeTournamentId }) {
       // Fetch team counts for each tournament
       const counts = {};
       for (const t of tours) {
-        const { count, error: countErr } = await supabase
-          .from('teams')
-          .select('*', { count: 'exact', head: true })
-          .eq('tournament_id', t.id);
-        if (!countErr) {
-          counts[t.id] = count || 0;
+        try {
+          const count = await getTeamCount(t.id);
+          counts[t.id] = count;
+        } catch {
+          counts[t.id] = 0;
         }
       }
       setTDetails(counts);
@@ -36,11 +42,8 @@ export default function AdminPanel({ onSelectTournament, activeTournamentId }) {
 
   useEffect(() => {
     load();
-    const ch = supabase
-      .channel('admin-tours')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tournaments' }, load)
-      .subscribe();
-    return () => supabase.removeChannel(ch);
+    const unsubscribe = subscribeToChanges(null, load);
+    return () => unsubscribe();
   }, []);
 
   const handleRename = async (id, currentName, e) => {
@@ -49,11 +52,7 @@ export default function AdminPanel({ onSelectTournament, activeTournamentId }) {
     if (!newName || !newName.trim() || newName.trim() === currentName) return;
 
     try {
-      const { error: renameErr } = await supabase
-        .from('tournaments')
-        .update({ name: newName.trim() })
-        .eq('id', id);
-      if (renameErr) throw renameErr;
+      await renameTournament(id, newName.trim());
       load();
     } catch (err) {
       alert("Xatolik: " + err.message);
@@ -102,13 +101,8 @@ export default function AdminPanel({ onSelectTournament, activeTournamentId }) {
 
     try {
       // 1. Fetch tournament details to check if admin_code is set
-      const { data: tour, error: fetchErr } = await supabase
-        .from('tournaments')
-        .select('admin_code')
-        .eq('id', id)
-        .single();
-
-      if (fetchErr) throw fetchErr;
+      const adminCode = await fetchTournamentAdminCode(id);
+      const tour = { admin_code: adminCode };
 
       // 2. If it has a code, check cached or prompt the user
       if (tour && tour.admin_code) {
@@ -131,8 +125,7 @@ export default function AdminPanel({ onSelectTournament, activeTournamentId }) {
       }
 
       // 3. Delete the tournament
-      const { error: delErr } = await supabase.from('tournaments').delete().eq('id', id);
-      if (delErr) throw delErr;
+      await deleteTournament(id);
 
       if (activeTournamentId === id) onSelectTournament(null);
       load();
