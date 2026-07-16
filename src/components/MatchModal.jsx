@@ -7,6 +7,7 @@ export default function MatchModal({ isOpen, onClose, match, team1, team2, onSav
   const [p2, setP2] = useState(0);
   const [winnerId, setWinnerId] = useState('');
   const [error, setError] = useState('');
+  const [penaltiesActive, setPenaltiesActive] = useState(false);
 
   useEffect(() => {
     if (match) {
@@ -15,14 +16,16 @@ export default function MatchModal({ isOpen, onClose, match, team1, team2, onSav
       setP1(match.penalty1 != null ? match.penalty1 : 0);
       setP2(match.penalty2 != null ? match.penalty2 : 0);
       setWinnerId(match.winner_id || '');
+      setPenaltiesActive(match.match_status === 'penalties' || match.penalty1 != null || match.penalty2 != null);
       setError('');
     }
-  }, [match?.id]);
+  }, [match?.id, match?.match_status]);
 
   // Determine winner dynamically on score or penalty changes
   useEffect(() => {
     const isDraw = s1 === s2;
     if (!isDraw) {
+      setPenaltiesActive(false); // Force false if not a draw
       if (s1 > s2) setWinnerId(match?.team1_id || '');
       else setWinnerId(match?.team2_id || '');
     } else {
@@ -36,6 +39,26 @@ export default function MatchModal({ isOpen, onClose, match, team1, team2, onSav
 
   const isDraw = s1 === s2;
   const isCompleted = match.is_completed;
+
+  const handleEndRegularTime = () => {
+    if (s1 !== s2) {
+      setError("Asosiy vaqt durrang bo'lsagina penaltilar seriyasini o'tkazish mumkin.");
+      return;
+    }
+    setError('');
+    setPenaltiesActive(true);
+    onSave({
+      matchId: match.id,
+      score1: s1,
+      score2: s2,
+      penalty1: p1,
+      penalty2: p2,
+      winnerId: null,
+      oldWinnerId: match.winner_id,
+      isCompleted: false,
+      matchStatus: 'penalties'
+    });
+  };
 
   const handleSaveClick = (finalize = false) => {
     if (isDraw && p1 === p2 && finalize) {
@@ -66,7 +89,7 @@ export default function MatchModal({ isOpen, onClose, match, team1, team2, onSav
       winnerId: currentWinner || null,
       oldWinnerId: match.winner_id,
       isCompleted: finalize,
-      matchStatus: finalize ? 'completed' : 'live'
+      matchStatus: finalize ? 'completed' : (penaltiesActive ? 'penalties' : 'live')
     });
   };
 
@@ -140,11 +163,19 @@ export default function MatchModal({ isOpen, onClose, match, team1, team2, onSav
             );
           })}
 
-          {/* Penalties Section (Only if score is a draw) */}
-          {isDraw && team1 && team2 && (
-            <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px dashed var(--c-border)' }}>
+          {/* Penalties Section (Always visible, but disabled if not active) */}
+          {team1 && team2 && (
+            <div 
+              style={{ 
+                marginTop: 16, 
+                paddingTop: 16, 
+                borderTop: '1px dashed var(--c-border)',
+                opacity: penaltiesActive ? 1 : 0.4,
+                transition: 'opacity 0.2s ease'
+              }}
+            >
               <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--c-gold)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12, textAlign: 'center' }}>
-                🎯 Penaltilar Seriyasi
+                🎯 Penaltilar Seriyasi {!penaltiesActive && <span style={{ fontSize: 9, color: 'var(--c-muted)', textTransform: 'none' }}>(faolsiz)</span>}
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-around', gap: 16 }}>
                 {[
@@ -161,15 +192,42 @@ export default function MatchModal({ isOpen, onClose, match, team1, team2, onSav
                           type="button" 
                           className="counter-btn" 
                           onClick={() => setVal(Math.max(0, val - 1))}
-                          disabled={val <= 0}
-                          style={{ width: 24, height: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--c-border)', background: 'transparent', color: '#fff', cursor: 'pointer', fontSize: 10 }}
+                          disabled={!penaltiesActive || val <= 0}
+                          style={{ 
+                            width: 24, 
+                            height: 24, 
+                            borderRadius: '50%', 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'center', 
+                            border: '1px solid var(--c-border)', 
+                            background: 'transparent', 
+                            color: '#fff', 
+                            cursor: penaltiesActive ? 'pointer' : 'not-allowed', 
+                            fontSize: 10,
+                            opacity: penaltiesActive ? 1 : 0.5
+                          }}
                         >－</button>
-                        <span style={{ fontSize: 14, fontWeight: 800 }}>{val}</span>
+                        <span style={{ fontSize: 14, fontWeight: 800, color: penaltiesActive ? '#fff' : 'var(--c-muted)' }}>{val}</span>
                         <button 
                           type="button" 
                           className="counter-btn" 
                           onClick={() => setVal(val + 1)}
-                          style={{ width: 24, height: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--c-border)', background: 'transparent', color: '#fff', cursor: 'pointer', fontSize: 10 }}
+                          disabled={!penaltiesActive}
+                          style={{ 
+                            width: 24, 
+                            height: 24, 
+                            borderRadius: '50%', 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'center', 
+                            border: '1px solid var(--c-border)', 
+                            background: 'transparent', 
+                            color: '#fff', 
+                            cursor: penaltiesActive ? 'pointer' : 'not-allowed', 
+                            fontSize: 10,
+                            opacity: penaltiesActive ? 1 : 0.5
+                          }}
                         >＋</button>
                       </div>
                     ) : (
@@ -185,15 +243,23 @@ export default function MatchModal({ isOpen, onClose, match, team1, team2, onSav
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginTop: 24 }}>
             {!isCompleted ? (
               <>
-                <button type="button" className="btn btn-ghost btn-sm" onClick={handleReset} style={{ fontSize: 12 }}>
-                  Tozalash
-                </button>
-                <div style={{ flex: 1 }} />
-                <button type="button" className="btn btn-secondary" onClick={() => handleSaveClick(false)} style={{ fontSize: 12, padding: '8px 12px' }}>
-                  💾 Saqlash
-                </button>
-                <button type="button" className="btn btn-primary" onClick={() => handleSaveClick(true)} style={{ fontSize: 12, padding: '8px 12px' }}>
-                  🏁 Yakunlash
+                {!penaltiesActive && (
+                  <button type="button" className="btn btn-secondary" onClick={() => handleSaveClick(false)} style={{ fontSize: 12, padding: '8px 12px', flex: 1 }}>
+                    💾 Saqlash
+                  </button>
+                )}
+                {!penaltiesActive && s1 === s2 && (
+                  <button 
+                    type="button" 
+                    className="btn btn-ghost" 
+                    onClick={handleEndRegularTime} 
+                    style={{ fontSize: 12, padding: '8px 12px', flex: 1, border: '1px solid var(--c-border)', color: 'var(--c-gold)' }}
+                  >
+                    ⏱ Asosiy Vaqt
+                  </button>
+                )}
+                <button type="button" className="btn btn-primary" onClick={() => handleSaveClick(true)} style={{ fontSize: 12, padding: '8px 12px', flex: 1 }}>
+                  🏁 O'yinni Tugatish
                 </button>
               </>
             ) : (
